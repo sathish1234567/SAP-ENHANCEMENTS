@@ -1,0 +1,228 @@
+Enhancement name for BADI:/SAPMP/CL_IM_GM_CO11N         IF_EX_WORKORDER_CONFIRM~AT_SAVE
+@78\QImporting@	I_TYPE	TYPE AKTYP	Activity Category in the Transaction
+@78\QImporting@	IS_CONFIRMATION	TYPE COBAI_S_CONFIRMATION_DIALOG	Current Confirmation (Dialog Structure)
+@03\QException@	ERROR_WITH_MESSAGE		Error Message Occurred
+
+
+METHOD if_ex_workorder_confirm~at_save.
+
+  DATA: lt_cowb_comp TYPE ty_t_cowb_comp.
+  DATA: ls_afpod     TYPE afpod,
+        ls_cowb_comp TYPE cowb_comp.
+
+  DATA: ls_caufvd TYPE caufvd,
+        ls_afvgd  TYPE afvgd,
+        ls_resbd  TYPE resbd,
+        ls_t430   TYPE t430.
+
+  DATA: l_msgty       TYPE sy-msgty.
+
+  TYPES: lty_afpod TYPE TABLE OF afpodget,
+         lty_resbd TYPE TABLE OF resbdget.
+
+  DATA: lt_afpod    TYPE lty_afpod,
+        lt_resbd    TYPE lty_resbd.
+  DATA: l_afpod_idx TYPE sy-tabix.
+
+  DATA: l_we_rel,
+        l_bapi_rel TYPE bapi_flag.
+
+ DATA: ls_tcorussdef TYPE tcorussdef.
+
+* SAPMP specific
+ DATA: ls_dynpro_subscrarea TYPE sldet.
+
+ DATA: lt_tmp_dfies TYPE TABLE OF dfies.
+ DATA: l_sldet    LIKE ls_dynpro_subscrarea-sldet1.
+ DATA: l_slots       TYPE i,
+       l_pc_we_aktiv TYPE c.
+
+* CHECKS : no cancel
+  CHECK is_confirmation-stzhl IS INITIAL.
+
+*  * Check Goods movements
+  CALL FUNCTION 'CO_WB_GET_GOODS_MOVEMENTS'
+    TABLES
+      et_comp = lt_cowb_comp.
+
+  READ TABLE lt_cowb_comp INTO ls_cowb_comp WITH KEY BWART = '101' WBEAKZ = 'D'.
+  IF sy-subrc EQ 0.
+*    MESSAGE ID 'C6' TYPE l_msgty NUMBER '041'
+*                RAISING error_with_message.
+    MESSAGE 'Header Material missing for Goods Receipt 101' TYPE l_msgty DISPLAY LIKE 'S'
+                RAISING error_with_message.
+ENDIF.
+    CLEAR: LT_COWB_COMP.
+
+  CALL FUNCTION 'CO_MES_GET_MESS_TYPE'
+    EXPORTING
+      i_msgid  = 'C6'
+      i_msgno  = '041'
+    IMPORTING
+      e_msgty  = l_msgty
+    EXCEPTIONS
+      no_entry = 1
+      OTHERS   = 2.
+
+  CHECK l_msgty = 'E' OR l_msgty = 'W'.
+
+* Entnahmebuchungen sind nur möglich für Rückmeldungen zum Vorgang
+  CHECK NOT is_confirmation-aplzl IS INITIAL.
+
+  CALL FUNCTION 'CO_BI_AFPO_SET'
+    EXPORTING
+      aufnr_act       = is_confirmation-aufnr
+    EXCEPTIONS
+      entry_not_found = 1
+      table_empty     = 2
+      OTHERS          = 3.
+  IF sy-subrc <> 0.
+    EXIT.
+  ENDIF.
+
+  DO.
+    CALL FUNCTION 'CO_BI_AFPO_GET'
+      EXPORTING
+        aufnr_act = is_confirmation-aufnr
+      IMPORTING
+        afpod_exp = ls_afpod
+      EXCEPTIONS
+        eof       = 1
+        OTHERS    = 2.
+
+    IF sy-subrc <> 0.
+      EXIT.
+    ENDIF.
+  ENDDO.
+
+* Auftragsdaten bereitstellen
+  CALL FUNCTION 'CO_BT_CAUFV_READ_WITH_KEY'
+    EXPORTING
+      aufnr_act      = is_confirmation-aufnr
+      no_dialog_info = 'X'
+    IMPORTING
+      caufvd_exp     = ls_caufvd.
+* nur für Multipos-Aufträge
+  CHECK NOT ls_caufvd-flg_mltps IS INITIAL.
+
+* kein Prüflose
+  CHECK ls_caufvd-prueflos IS INITIAL.
+* Autom. WE nur für übergeordneten Auftrag im Netz
+  CHECK ls_caufvd-lead_aufnr IS INITIAL     OR (
+        NOT ls_caufvd-colordproc IS INITIAL AND
+        ls_caufvd-lead_aufnr = is_confirmation-aufnr ).
+* kein WE bei Untervorgängen
+  CHECK is_confirmation-sumnr IS INITIAL.
+
+* Vorgangsdaten bereitstellen
+  CALL FUNCTION 'CO_BT_AFVG_READ_WITH_KEY'
+    EXPORTING
+      aplzl     = is_confirmation-aplzl
+      aufnr_act = is_confirmation-aufnr
+      aufpl     = is_confirmation-aufpl
+    IMPORTING
+      afvgd_exp = ls_afvgd.
+
+
+* Vorgangssteuerschlüssel des aktuellen Vorgangs bereitstellen
+* If milestone, we have to check all predecessors
+  CALL FUNCTION 'CO_TA_T430_READ'
+    EXPORTING
+      plnaw    = ls_caufvd-plnaw
+      spras    = sy-langu
+      steus    = ls_afvgd-steus
+    IMPORTING
+      struct   = ls_t430
+    EXCEPTIONS
+      no_entry = 01.
+  CHECK sy-subrc = 0.
+
+* Kein auto-WE zu Nachbearbeitungsvorgängen
+  CHECK ls_t430-rework IS INITIAL.
+
+* Aut WE
+  IF is_confirmation-meilr IS INITIAL.
+    CHECK NOT ls_t430-autwe IS INITIAL.
+  ELSE.
+    CHECK me->auto_gr_check( i_aplzl = is_confirmation-aplzl
+                             i_aufnr = is_confirmation-aufnr
+                             i_aufpl = is_confirmation-aufpl
+                             i_plnaw = ls_caufvd-plnaw ) = 'X'
+    OR NOT ls_t430-autwe IS INITIAL.
+  ENDIF.
+
+* Read order position
+  CALL FUNCTION 'CO_BI_GET_ITEMS'
+    EXPORTING
+      aufnr_act   = ls_caufvd-aufnr
+    TABLES
+      afpoget_tab = lt_afpod.
+* Read order reservation for operation check
+  CALL FUNCTION 'CO_BC_RESBD_OF_ORDER_GET'
+    EXPORTING
+      aufnr_act     = ls_caufvd-aufnr
+      check_deleted = 'X'
+    TABLES
+      resbd_get     = lt_resbd.
+
+* What's this for? Example for failing, see 0003594835 2004
+** Keep only the position of operation
+*  LOOP AT lt_afpod INTO ls_afpod.
+*    l_afpod_idx = sy-tabix.
+*    READ TABLE lt_resbd INTO ls_resbd
+*                        WITH KEY rsnum = ls_afpod-krsnr
+*                                 rspos = ls_afpod-krsps
+*                                 vornr = ls_afvgd-vornr.
+*    IF sy-subrc NE 0.
+*      DELETE lt_afpod INDEX l_afpod_idx.
+*    ENDIF.
+*  ENDLOOP.
+*  CHECK NOT lt_afpod[] IS INITIAL.
+
+* No check by Bapi call
+  CALL FUNCTION '/SAPMP/BAPI_PRORDCF_INTERFACE'
+    IMPORTING
+      e_bapi_flag = l_bapi_rel.
+  CHECK l_bapi_rel IS INITIAL.
+
+* IF MILL-WE Screen aktiv kein automatischer WE möglich
+* get number of slots
+  CALL FUNCTION 'DDIF_NAMETAB_GET'
+    EXPORTING
+      tabname   = 'SLDET'
+    TABLES
+      dfies_tab = lt_tmp_dfies.
+
+  DESCRIBE TABLE lt_tmp_dfies LINES l_slots.
+
+  CALL FUNCTION 'CORU_S_GET_CUST'
+    IMPORTING
+      e_tcorussdef = ls_tcorussdef
+    EXCEPTIONS
+      not_found    = 1.
+
+  MOVE-CORRESPONDING ls_tcorussdef TO ls_dynpro_subscrarea. "Dynpros
+
+  DO l_slots TIMES VARYING l_sldet  FROM  ls_dynpro_subscrarea-sldet1
+                                    NEXT  ls_dynpro_subscrarea-sldet2
+                                    RANGE ls_dynpro_subscrarea.
+    IF l_sldet = '8490'.
+      l_pc_we_aktiv = 'X'.
+      EXIT.
+    ENDIF.
+  ENDDO.
+
+  CHECK l_pc_we_aktiv IS INITIAL.
+
+* Check Goods movements
+  CALL FUNCTION 'CO_WB_GET_GOODS_MOVEMENTS'
+    TABLES
+      et_comp = lt_cowb_comp.
+
+  READ TABLE lt_cowb_comp INTO ls_cowb_comp WITH KEY shkzg = 'S'.
+  IF sy-subrc NE 0.
+    MESSAGE ID 'C6' TYPE l_msgty NUMBER '041'
+                RAISING error_with_message.
+  ENDIF.
+
+ENDMETHOD.
