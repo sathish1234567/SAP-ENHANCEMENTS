@@ -1,0 +1,93 @@
+***INCLUDE RV60AFZC.
+
+************************************************************************
+*                                                                      *
+* This include is reserved for user modifications                      *
+* Forms for invoicing                                                  *
+* The name of modification modules should begin with 'ZZ'.             *
+*                                                                      *
+************************************************************************
+*       USEREXIT_NUMBER_RANGE_INV_DATE                                 *
+*       USEREXIT_FILL_VBRK_VBRP                                        *
+************************************************************************
+
+*---------------------------------------------------------------------*
+*       FORM USEREXIT_NUMBER_RANGE_INV_DATE                           *
+*---------------------------------------------------------------------*
+*       This userexit can be used to determine the numberranges for   *
+*       the internal document number. This userexit can be used when  *
+*       the number_ranger should impact the invoice date via table    *
+*       TVFKD.                                                        *
+*       If this userexit is active the USEREXIT_NUMBER_RANGE is not   *
+*       processed anymore, that means this userexit has priority.     *
+*       US_RANGE_INTERN - internal number range                       *
+*       This form is called from form LV60AU02 and LV60AU11           *
+*---------------------------------------------------------------------*
+FORM USEREXIT_NUMBER_RANGE_INV_DATE USING US_RANGE_INTERN.
+
+* Example: Number range from TVFK like in standard
+* US_RANGE_INTERN = TVFK-NUMKI.
+
+ENDFORM.
+
+*---------------------------------------------------------------------*
+*       FORM USEREXIT_FILL_VBRK_VBRP                                  *
+*---------------------------------------------------------------------*
+*       This userexit can be used to fill fields in VBRK and VBRP     *
+*       Be aware, that at this time the work areas KUAGV KURGV        *
+*       KUWEV and KUREV are not filled.                               *
+*       This form is called from FORM VBRK_VBRP_FUELLEN.              *
+*---------------------------------------------------------------------*
+FORM USEREXIT_FILL_VBRK_VBRP.
+"""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""$"$\SE:(1) Form USEREXIT_FILL_VBRK_VBRP, Start                                                                                                               A
+*$*$-Start: (1)---------------------------------------------------------------------------------$*$*
+ENHANCEMENT 1  ZVF01_PAN_VALIDATION.    "active version
+TYPES: BEGIN OF TY_KNA1,
+       kunnr TYPE kna1-kunnr,
+       J_1IPANNO TYPE kna1-J_1IPANNO,
+       END OF TY_KNA1.
+DATA: t_kna1 type table of ty_kna1,
+      w_kna1 type ty_kna1.
+
+DATA: lt_xvbpa type table of vbpa.
+IF vbrk-fkart NE 'ZEXP'.
+IF xvbpa[] is not INITIAL.
+
+lt_xvbpa[] = XVBPA[].
+
+DATA r_PARVW TYPE RANGE OF vbpa-PARVW.
+
+r_PARVW = VALUE #( ( sign = 'I' option = 'EQ' low = 'RE' )
+                ( sign = 'I' option = 'EQ' low = 'RG' ) ).
+
+DELETE lt_xvbpa WHERE NOT parvw IN r_parvw.
+
+IF lt_xvbpa is NOT INITIAL.
+
+Select kunnr
+       J_1IPANNO from kna1 into table t_kna1 for all entries in lt_xvbpa
+       where kunnr = lt_xvbpa-kunnr.
+
+ENDIF.
+Loop at t_kna1 into w_kna1.
+
+if w_kna1-J_1IPANNO is initial.
+
+Message 'PAN is not avaliable.' TYPE 'E'.
+EXIT.
+ENDIF.
+endloop.
+endif.
+ENDIF.
+ENDENHANCEMENT.
+*$*$-End:   (1)---------------------------------------------------------------------------------$*$*
+
+* Example: change Tax country
+* VBRK-LANDTX = T001-LAND1.
+
+ENDFORM.
+
+
+
+
+*eject
