@@ -1,0 +1,362 @@
+MAIN PROGRAM: SAPLXV56
+SUB PROGRAM: ZXV56U18
+FUNCTION MODULE EXIT:EXIT_SAPMV56A_001
+
+*&---------------------------------------------------------------------*
+*&  INCLUDE           ZXV56U18
+*&---------------------------------------------------------------------*
+*BREAK CORESD.
+TABLES: ysdweightbridge,yform_data.
+DATA: tare_wt LIKE i_xvttk_tab-allowed_twgt,  " TARE WEIGHT
+      load_wt LIKE i_xvttk_tab-allowed_twgt,  " LOADED WEIGHT
+      o_qty   LIKE vbap-kwmeng,                 " ORDER QTY
+      d_qty   LIKE vbap-kwmeng,                 " DELIVER QTY
+      t_qty   LIKE vbap-kwmeng,                 " TOLERANCE QTY
+      ex_qty  LIKE vbap-kwmeng,                " EXPECTED QTY WE CAN TAKE
+      t_per   LIKE vbap-uebto.                  " TOLERANCE PERCENTAGE
+
+DATA : form_no TYPE yform_data-form_no.
+DATA : form_no2 TYPE yform_data-form_no2.
+DATA : form_no3 TYPE yform_data-form_no3.
+
+DATA: it_vttp  TYPE TABLE OF vttp,
+      it_likp  TYPE TABLE OF likp,
+      wa_vttp  LIKE vttp,
+      wa_likp  LIKE likp,
+      wa_lips  LIKE lips OCCURS 0 WITH HEADER LINE,
+      wa_vbap  LIKE vbap OCCURS 0 WITH HEADER LINE,
+      wa_vepvg LIKE vepvg OCCURS 0 WITH HEADER LINE.
+
+DATA:w_answer TYPE c.
+DATA:   bdcdata LIKE bdcdata    OCCURS 0 WITH HEADER LINE.
+DATA:   messtab LIKE bdcmsgcoll OCCURS 0 WITH HEADER LINE.
+DATA: tonn TYPE p DECIMALS 3.
+DATA: tonn_t TYPE p DECIMALS 3.
+*DATA: TONN_C(132) TYPE C.
+DATA: tonn_c(17) TYPE c.
+DATA:t_qty1(17) TYPE c.
+DATA:i_lfimg LIKE lips-lfimg.
+DATA:i_vgbel LIKE lips-vgbel.
+
+IF sy-tcode = 'VT03N' OR sy-tcode = 'VT02N'.
+*BREAK-POINT.
+  LOOP AT i_xvttk_tab.
+    tare_wt = i_xvttk_tab-exti2.
+    load_wt = i_xvttk_tab-tndr_trkid.
+
+    IF ( tare_wt > load_wt ) AND load_wt <> 0.
+      MESSAGE 'LOAD WEIGHT SHOULD GREATER THAN TARE WEIGHT' TYPE 'I'.
+      LEAVE SCREEN.
+    ELSEIF ( tare_wt > load_wt ) AND load_wt = 0.
+
+    ELSE.
+      i_xvttk_tab-allowed_twgt = i_xvttk_tab-tndr_trkid - i_xvttk_tab-exti2.
+      MODIFY i_xvttk_tab.
+      SELECT * FROM vttp
+        INTO TABLE it_vttp
+        WHERE tknum = i_xvttk_tab-tknum.  " FIND DELIVERY ORDER NO
+
+      IF NOT it_vttp[] IS INITIAL.
+        SELECT * FROM likp
+          INTO TABLE it_likp
+           FOR ALL ENTRIES IN it_vttp
+          WHERE vbeln = it_vttp-vbeln.
+      ENDIF.
+      READ TABLE it_likp INTO wa_likp INDEX 1.
+
+      tonn = i_xvttk_tab-allowed_twgt / 1000.
+
+      IF ( wa_likp-vkorg = '7000' AND wa_likp-tragr = '0002' )
+      OR ( wa_likp-vkorg = '5000' AND wa_likp-tragr = '0002' ).
+*        IF WA_LIKP-LFART <> 'YSAR' AND WA_LIKP-LFART <> 'ZSAR'." COMMENTED ON 30.03.2009
+*        ENDIF.
+*      -=-=-=-=-=-=-=-=-      TOLERANCE CHECKING  -=-=-=-=-=-=-=-=-=-=-=-=
+**********************HMM**********************************
+
+        SELECT * FROM lips
+          INTO CORRESPONDING FIELDS OF wa_lips
+           FOR ALL ENTRIES IN it_vttp
+          WHERE vbeln = it_vttp-vbeln.            " FIND SALES OREDER NO
+          i_lfimg = i_lfimg + wa_lips-lfimg.
+          i_vgbel = wa_lips-vgbel.
+          APPEND wa_lips.
+          CLEAR wa_lips.
+        ENDSELECT.
+
+        READ TABLE wa_lips INDEX 1.
+        IF wa_lips-vrkme = 'KG'.
+          tonn = i_xvttk_tab-allowed_twgt.
+        ENDIF.
+
+        LOOP AT wa_lips.
+        ENDLOOP.
+        LOOP AT wa_vbap.
+        ENDLOOP.
+*        DELETE ADJACENT DUPLICATES FROM wa_lips COMPARING vgbel posnr. "Commented by Samarth
+        t_qty = 0.
+        ex_qty = 0.
+
+        LOOP AT wa_lips.
+          o_qty = wa_lips-lfimg.
+          t_per = wa_lips-uebto.
+          t_qty = o_qty + ( o_qty * t_per / 100 ).
+          ex_qty = ex_qty + t_qty.
+        ENDLOOP.
+
+        LOOP AT wa_vbap.
+          SELECT * FROM vepvg
+            INTO CORRESPONDING FIELDS OF wa_vepvg
+            WHERE vbeln = wa_vbap-vbeln.
+            APPEND wa_vepvg.
+          ENDSELECT.
+        ENDLOOP.
+
+        IF wa_likp-lfart <> 'YSAR' AND wa_likp-lfart <> 'ZSAR'." COMMENTED ON 30.03.2009
+          IF tonn > ex_qty.
+            EXPORT tonn TO MEMORY ID 'ALLOWED_TWGT'.
+            MESSAGE 'OVERDELIVERY' TYPE 'I'.
+            LEAVE SCREEN.
+          ENDIF.
+        ENDIF.
+        IF sy-tcode = 'VT03N'.
+          IF sy-ucomm = 'MM_TKAL'.
+            DATA:str TYPE string.
+            DATA: i TYPE numc2.
+            DATA:str1 TYPE string.
+**********
+            " FIND SO DETAILS
+
+            DATA : lv_tabix TYPE sy-tabix.
+            DESCRIBE TABLE it_vttp LINES lv_tabix.
+            DATA : lc_tabix TYPE sy-tabix,
+                   t_qtyt   LIKE t_qty.
+            CLEAR : t_qtyt.
+            tonn_t = tonn.
+            LOOP AT it_vttp INTO wa_vttp.
+              lc_tabix = sy-tabix.
+              REFRESH : bdcdata.
+              CLEAR : bdcdata.
+              bdcdata-program  = 'SAPMV50A'.
+              bdcdata-dynpro   = '4004'.
+              bdcdata-dynbegin = 'X'.
+              APPEND bdcdata.
+              CLEAR bdcdata.
+*  PERFORM BDC_FIELD       USING 'BDC_CURSOR'
+*                                'LIKP-VBELN'.
+              bdcdata-fnam = 'BDC_CURSOR'.
+              bdcdata-fval = 'LIKP-VBELN'.
+              APPEND bdcdata.
+              CLEAR bdcdata.
+*  PERFORM BDC_FIELD       USING 'BDC_OKCODE'
+*                                '/00'.
+              bdcdata-fnam = 'BDC_OKCODE'.
+              bdcdata-fval = '/00'.
+              APPEND bdcdata.
+              CLEAR bdcdata.
+*  PERFORM BDC_FIELD       USING 'LIKP-VBELN'
+*                                '3002500098'.     "RECORD-VBELN_001.
+
+              bdcdata-fnam = 'LIKP-VBELN'.
+              bdcdata-fval = wa_vttp-vbeln.
+              APPEND bdcdata.
+              CLEAR bdcdata.
+*  PERFORM BDC_DYNPRO      USING 'SAPMV50A' '1000'.
+              bdcdata-program  = 'SAPMV50A'.
+              bdcdata-dynpro   = '1000'.
+              bdcdata-dynbegin = 'X'.
+              APPEND bdcdata.
+              CLEAR bdcdata.
+*  PERFORM BDC_FIELD       USING 'BDC_OKCODE'
+*                                '=SICH_T'.
+              bdcdata-fnam = 'BDC_OKCODE'.
+              bdcdata-fval = '=SICH_T'.
+              APPEND bdcdata.
+              CLEAR bdcdata.
+
+*************
+              t_qty = 0. ex_qty = 0. i = 00.
+*Changed by Samarth
+*              IF lc_tabix = lv_tabix.
+*                SELECT * FROM lips
+*                              INTO CORRESPONDING FIELDS OF wa_lips
+*                               FOR ALL ENTRIES IN it_vttp
+*                              WHERE vbeln = it_vttp-vbeln.
+*
+*
+*
+*                  o_qty = wa_lips-lfimg.
+*                  t_per = wa_lips-uebto.
+*                  t_qty = o_qty + ( o_qty * t_per / 100 ).
+*                  ex_qty = ex_qty + t_qty.
+*                ENDSELECT.
+*                t_qty = ex_qty - t_qtyt.
+*                IF tonn > ex_qty OR tonn = ex_qty.
+*                  t_qty1 = t_qty.
+*                ELSEIF tonn < ex_qty.
+*                  t_qty1 = t_qty - ( ex_qty - tonn ).
+*                ENDIF.
+*                i = i + 01.
+*                CONCATENATE 'LIPSD-PIKMG(' i ')'
+*                                 INTO str.
+*                CONCATENATE 'LIPSD-G_LFIMG(' i ')'
+*                                 INTO str1.
+*                CONDENSE t_qty1.
+*              ELSE.
+*                SELECT * FROM lips
+*                              INTO CORRESPONDING FIELDS OF wa_lips
+*                              WHERE vbeln = wa_vttp-vbeln.
+*                  t_qty1 = wa_lips-lfimg.
+*                  t_qtyt = t_qtyt + wa_lips-lfimg.
+*                  CONDENSE t_qty1.
+*
+*                  i = i + 01.
+*                  CONCATENATE 'LIPSD-PIKMG(' i ')'
+*                                   INTO str.
+*                  CONCATENATE 'LIPSD-G_LFIMG(' i ')'
+*                                   INTO str1.
+*                  CONDENSE t_qty1.
+*                ENDSELECT.
+*              ENDIF.
+
+              SELECT * FROM lips
+                            INTO CORRESPONDING FIELDS OF wa_lips
+*                             FOR ALL ENTRIES IN it_vttp
+                            WHERE vbeln = wa_vttp-vbeln.
+
+
+
+                o_qty = wa_lips-lfimg.
+                t_per = wa_lips-uebto.
+                t_qty = o_qty + ( o_qty * t_per / 100 ).
+
+                IF tonn_t GT 0.
+                  IF tonn_t GE t_qty.
+                    t_qty1 = t_qty.
+                    tonn_t = tonn_t - t_qty.
+                  ELSE.
+                    t_qty1 = tonn_t.
+                    tonn_t = 0.
+                  ENDIF.
+
+                  i = i + 01.
+                  CONCATENATE 'LIPSD-PIKMG(' i ')'
+                                   INTO str.
+                  CONCATENATE 'LIPSD-G_LFIMG(' i ')'
+                                   INTO str1.
+                  CONDENSE t_qty1.
+
+                  bdcdata-fnam = str1.
+                  bdcdata-fval = t_qty1."I_XVTTK_TAB-ALLOWED_TWGT / 1000.
+                  APPEND bdcdata.
+                  CLEAR bdcdata.
+
+                  bdcdata-fnam = str.
+                  bdcdata-fval = t_qty1."I_XVTTK_TAB-ALLOWED_TWGT / 1000.
+                  APPEND bdcdata.
+                  CLEAR bdcdata.
+                  CLEAR wa_vbap.
+                ENDIF.
+              ENDSELECT.
+
+
+*Changed by Samarth
+*************
+*  PERFORM BDC_FIELD       USING 'BDC_CURSOR'
+*                                'LIPSD-PIKMG(01)'.
+
+              bdcdata-fnam = 'BDC_CURSOR'.
+              bdcdata-fval = str.
+              APPEND bdcdata.
+              CLEAR bdcdata.
+
+
+              CALL TRANSACTION 'VL02N' USING bdcdata MODE 'N' UPDATE 'L' MESSAGES INTO messtab.
+            ENDLOOP.
+***********
+          ENDIF."SY-TCODE
+        ENDIF."SY-UCOMM
+      ENDIF. " VKORG
+*   ENDIF." SY-UCOMM
+      IF sy-ucomm = 'WT_CAP' AND sy-tcode = 'VT02N'.
+        IF wa_likp-vkorg = '6000'.
+          TABLES:vttp,vttk,likp.
+          DATA:i_vttp LIKE vttp OCCURS 0 WITH HEADER LINE.
+          DATA:i_btgew LIKE likp-btgew.
+
+
+          SELECT SINGLE * FROM vttk
+                WHERE tknum = i_xvttk_tab-tknum.
+
+          SELECT * FROM vttp
+            INTO CORRESPONDING FIELDS OF TABLE i_vttp
+           WHERE tknum = i_xvttk_tab-tknum.
+          i_btgew = 0.
+          LOOP AT i_vttp.
+            SELECT * FROM likp
+              WHERE vbeln = i_vttp-vbeln.
+              i_btgew = i_btgew + likp-btgew.
+            ENDSELECT.
+          ENDLOOP.
+
+          tonn = tonn * 1000.
+          IF tonn > i_btgew.
+            MESSAGE 'OVERDELIVERY' TYPE 'W'.
+*
+          ENDIF.
+        ENDIF.
+      ENDIF.
+*&----JR Infotech----------&*
+* Commented  code on 23.10.2019
+*IF sy-ucomm = 'MM_TRLP' AND ( sy-tcode = 'VT02N' OR sy-tcode = 'VT02' ).
+*        AUTHORITY-CHECK OBJECT 'V_VTTK_TSA' FOR USER sy-uname
+*                    ID 'SHTYP' FIELD '*'
+*                    ID 'TRSTACT' FIELD 'R2'
+*                    ID 'TRSTACT' FIELD 'S2'.
+*        IF sy-subrc = 0.
+*          DATA : w_vttp   TYPE vttp,
+*                 d_vbeln  TYPE lips-vbeln,
+*                 w_zvt02n TYPE zvt02n.
+*          CLEAR: w_vttp, d_vbeln, w_zvt02n.
+*          CLEAR: w_zvt02n.
+*          SELECT SINGLE *
+*                   FROM zvt02n
+*                   INTO w_zvt02n
+*                  WHERE user_n = sy-uname.
+*          IF sy-subrc = 4.
+*            SELECT SINGLE *
+*                     FROM vttp
+*                     INTO w_vttp
+*                    WHERE tknum = i_xvttk_tab-tknum "vttk-tknum
+*                      AND tpnum = '0001'.
+*            IF sy-subrc = 0.
+*              SELECT SINGLE vbeln
+*                       FROM lips
+*                       INTO d_vbeln
+*                      WHERE vbeln = w_vttp-vbeln.
+*              IF sy-subrc = 0.
+*                MESSAGE e001(00)
+*        WITH 'You can not delete the shipment for which delivery exist'.
+*                LEAVE TO SCREEN 0.
+*              ENDIF.
+*            ELSEIF sy-subrc = 4.
+*              CLEAR: w_zvt02n.
+*              SELECT SINGLE *
+*                       FROM zvt02n
+*                       INTO w_zvt02n
+*                      WHERE user_n = sy-uname.
+*              IF sy-subrc = 4.
+*                MESSAGE 'No authorization' TYPE 'E'.
+*                LEAVE TO SCREEN 0.
+*              ENDIF.
+*            ENDIF.
+*          ENDIF.
+*        ELSE.
+*          MESSAGE 'No authorization' TYPE 'E'.
+*          LEAVE SCREEN.
+*        ENDIF.
+*      ENDIF.
+* Ended comment on 23.10.2019
+*&-------------------------&*
+    ENDIF.
+  ENDLOOP.
+ENDIF.
