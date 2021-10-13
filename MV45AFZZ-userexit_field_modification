@@ -1,0 +1,24 @@
+Question:
+We create a Sales Order (eg. ZXXX) through a Z-development. My requirement is that this particular document type should not be created using t.code VA01. 
+Need a validation for VA01 in the first screen itself 
+( where the document type, Sales Org, Dist Channel and Divn is entered) to restrict creation of document type ZXXX thru t.code VA01
+
+
+Answer:
+I've implemented a couple of times this using the following technique.
+
+Program MV45AFZZ -> FORM userexit_field_modification -> include zv45afzz02
+
+When you go to VA01 and insert the document type and press enter, the system will stop in this userexit.
+
+Here you just have to do a statement like this.
+
+IF SY-TCODE = 'VA01' AND VBAK-AUART ='XXXX' <- the document type you want to block.
+
+MESSAGE EXXX(XXX) WITH VBAK-AUART. <- Create a new error message (SE91) ''Sales document XXXX cannot be created via this transaction.''
+
+ENDIF.
+
+Please let me know if this helped you,
+
+Regards,
