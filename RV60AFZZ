@@ -1,0 +1,888 @@
+***INCLUDE RV60AFZZ .
+
+************************************************************************
+*                                                                      *
+* This include is reserved for user modifications                      *
+* Forms for invoicing                                                  *
+* The name of modification modules should begin with 'ZZ'.             *
+*                                                                      *
+************************************************************************
+*       USEREXIT_ACCOUNT_PREP_KOMKCV                                   *
+*       USEREXIT_ACCOUNT_PREP_KOMPCV                                   *
+*       USEREXIT_NUMBER_RANGE                                          *
+*       USEREXIT_PRICING_PREPARE_TKOMK                                 *
+*       USEREXIT_PRICING_PREPARE_TKOMP                                 *
+************************************************************************
+
+************************************************************************
+*       FORM ZZEXAMPLE                                                *
+*---------------------------------------------------------------------*
+*       text......................................                    *
+*---------------------------------------------------------------------*
+*FORM ZZEXAMPLE.
+
+*  ...
+
+*ENDFORM.
+
+*eject
+
+*---------------------------------------------------------------------*
+*       FORM USEREXIT_ACCOUNT_PREP_KOMKCV                             *
+*---------------------------------------------------------------------*
+*       This userexit can be used to move additional fields into the  *
+*       communication table which is used for account allocation:     *
+*       KOMKCV for header fields                                      *
+*       This form is called from form KONTENFINDUNG                   *
+*---------------------------------------------------------------------*
+FORM USEREXIT_ACCOUNT_PREP_KOMKCV.
+
+*  KOMKCV-zzfield = xxxx-zzfield2.
+
+ENDFORM.
+*eject
+
+*---------------------------------------------------------------------*
+*       FORM USEREXIT_ACCOUNT_PREP_KOMPCV                             *
+*---------------------------------------------------------------------*
+*       This userexit can be used to move additional fields into the  *
+*       communication table which is used for account allocation:     *
+*       KOMPCV for item fields                                        *
+*       This form is called from form KONTENFINDUNG                   *
+*---------------------------------------------------------------------*
+FORM USEREXIT_ACCOUNT_PREP_KOMPCV.
+
+*  KOMPCV-zzfield = xxxx-zzfield2.
+
+ENDFORM.
+*eject
+
+*---------------------------------------------------------------------*
+*       FORM USEREXIT_NUMBER_RANGE                                    *
+*---------------------------------------------------------------------*
+*       This userexit can be used to determine the numberranges for   *
+*       the internal document number.                                 *
+*       US_RANGE_INTERN - internal number range                       *
+*       This form is called from form LV60AU02                        *
+*---------------------------------------------------------------------*
+FORM USEREXIT_NUMBER_RANGE USING US_RANGE_INTERN.
+"""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""$"$\SE:(1) Form USEREXIT_NUMBER_RANGE, Start                                                                                                                 A
+*$*$-Start: (1)---------------------------------------------------------------------------------$*$*
+ENHANCEMENT 1  YSDBILLING.    "active version
+tables: znumrb.
+SELECT SINGLE * FROM znumrb where vkorg eq vbrk-vkorg
+                             and werks eq vbrp-werks
+                             and fkart eq vbrk-fkart.
+if sy-subrc = 0.
+   US_RANGE_INTERN = znumrb-NUMKI.
+  ENDIF.
+ENDENHANCEMENT.
+ENHANCEMENT 1  ZSD_CHECK_MAT_BATCHSS.    "active version
+
+* Check for Price with Material and batch combination in Tcode VF01 by bala
+IF sy-tcode = 'VF01'.
+  IF xvbrk-vkorg EQ '2000' OR
+     xvbrk-vkorg EQ '9000' OR
+     xvbrk-vkorg EQ '3000'.
+   data:ls_VBRP TYPE VBRPVB.
+  LOOP AT XVBRP INTO LS_VBRP.
+    IF vbrk-fkart = 'ZDMF' OR vbrk-fkart = 'ZDLF' OR vbrk-fkart = 'ZDRF' OR
+       vbrk-fkart = 'ZDSF' OR vbrk-fkart = 'ZEXP' OR vbrk-fkart = 'ZEXF' OR
+       vbrk-fkart = 'ZRSF'."vbrk-fkart = 'ZRTF' OR
+      DATA:ls_a951  TYPE a951,
+           ls_a952  TYPE a952,
+           ls_a953  TYPE a953,
+           ls_a954  TYPE a954,
+           ls_a612  TYPE a612,
+           ls_a603  TYPE a603,
+           ls_a991  TYPE a991,
+           ls_a941  TYPE a941,
+           ls_a942  TYPE a942,
+           ls_a943  TYPE a943,
+           ls_a944  TYPE a944,
+           ls_a945  TYPE a945,
+           ls_a946  TYPE a946,
+           lv_matnr TYPE matnr,
+           lv_posnr TYPE posnr_vf,
+           lv_text  TYPE char35,
+           lv_cond  TYPE kscha.
+      IF vbrk-fkart = 'ZEXD' OR vbrk-fkart = 'ZEXF'.
+        lv_cond = 'ZEXP'.
+      ELSE.
+        lv_cond = 'YMRP'.
+      ENDIF.
+      IF lv_cond = 'YMRP'.
+        SELECT SINGLE a~mandt
+          a~kappl a~kschl a~vkorg a~vtweg a~kunag a~kunwe
+          a~matnr a~charg a~kfrst a~datbi a~datab a~kbstat
+          a~knumh
+          FROM a951 AS a INNER JOIN konp AS b ON a~knumh EQ b~knumh
+          INTO ls_a951
+        WHERE a~vkorg = xvbrk-vkorg
+          AND a~vtweg = xvbrk-vtweg
+          AND a~kunag = xvbrk-kunag
+          AND a~kunwe = likp-kunnr
+          AND a~matnr = LS_VBRP-matnr
+          AND a~charg = LS_VBRP-charg
+          AND a~datbi GE xvbrk-fkdat
+          AND a~datab LE xvbrk-fkdat
+          AND b~loevm_ko EQ ''.
+        IF sy-subrc NE 0.
+
+          SELECT SINGLE a~mandt
+            a~kappl a~kschl a~vkorg a~vtweg a~kunag
+            a~kunwe a~matnr a~kfrst a~datbi a~datab
+            a~kbstat a~knumh
+            FROM a952 AS a INNER JOIN konp AS b ON a~knumh EQ b~knumh
+            INTO ls_a952
+          WHERE a~vkorg = xvbrk-vkorg
+            AND a~vtweg = xvbrk-vtweg
+            AND a~kunag = xvbrk-kunag
+            AND a~kunwe = likp-kunnr
+            AND a~matnr = LS_VBRP-matnr
+            AND a~datbi GE xvbrk-fkdat
+            AND a~datab LE xvbrk-fkdat
+            AND b~loevm_ko EQ ''.
+          IF sy-subrc NE 0.
+            SELECT SINGLE a~mandt
+              a~kappl a~kschl a~vkorg a~vtweg a~kunag
+              a~matnr a~charg a~kfrst a~datbi a~datab
+              a~kbstat a~knumh
+              FROM a953 AS a INNER JOIN konp AS b ON a~knumh EQ b~knumh
+              INTO ls_a953
+            WHERE a~vkorg = xvbrk-vkorg
+              AND a~vtweg = xvbrk-vtweg
+              AND a~kunag = xvbrk-kunag
+              AND a~matnr = LS_VBRP-matnr
+              AND a~charg = LS_VBRP-charg
+              AND a~datbi GE xvbrk-fkdat
+              AND a~datab LE xvbrk-fkdat
+              AND b~loevm_ko EQ ''.
+            IF sy-subrc NE 0.
+              SELECT SINGLE a~mandt
+                a~kappl a~kschl a~vkorg a~vtweg a~kunag
+                a~matnr a~kfrst a~datbi a~datab a~kbstat
+                a~knumh
+                FROM a954 AS a INNER JOIN konp AS b ON a~knumh EQ b~knumh
+                INTO ls_a954
+              WHERE a~vkorg = xvbrk-vkorg
+                AND a~vtweg = xvbrk-vtweg
+                AND a~kunag = xvbrk-kunag
+                AND a~matnr = LS_VBRP-matnr
+                AND a~datbi GE xvbrk-fkdat
+                AND a~datab LE xvbrk-fkdat
+                AND b~loevm_ko EQ ''.
+              IF sy-subrc NE 0.
+                SELECT SINGLE a~mandt
+                  a~kappl a~kschl a~vkorg a~regio a~matnr
+                  a~charg a~kfrst a~datbi a~datab a~kbstat
+                  a~knumh
+                  FROM a612
+                           AS a INNER JOIN konp AS b ON a~knumh EQ b~knumh
+                          INTO ls_a612
+                          WHERE a~kschl = lv_cond
+                            AND a~vkorg = xvbrk-vkorg
+                            AND a~matnr = LS_VBRP-matnr
+                            AND a~charg = LS_VBRP-charg
+                            AND a~datbi GE xvbrk-fkdat
+                            AND a~datab LE xvbrk-fkdat
+                            AND b~loevm_ko EQ ''.
+                IF sy-subrc NE 0.
+                  SELECT SINGLE a~mandt
+                    a~kappl a~kschl a~vkorg a~matnr a~charg
+                    a~kfrst a~datbi a~datab a~kbstat a~knumh
+                   FROM a603
+                   AS a INNER JOIN konp AS b ON a~knumh EQ b~knumh
+                  INTO ls_a603
+               WHERE a~kschl = lv_cond
+                 AND a~vkorg = xvbrk-vkorg
+                 AND a~matnr = LS_VBRP-matnr
+                 AND a~charg = LS_VBRP-charg
+                 AND a~datbi GE xvbrk-fkdat
+                 AND a~datab LE xvbrk-fkdat
+                 AND b~loevm_ko EQ ''.
+                  IF sy-subrc NE 0.
+                    SELECT SINGLE a~mandt
+                      a~kappl a~kschl a~vkorg a~matnr a~kfrst
+                      a~datbi a~datab a~kbstat a~knumh
+                      FROM  a991
+                      AS a INNER JOIN konp AS b ON a~knumh EQ b~knumh
+                     INTO ls_a991
+                   WHERE a~kschl = lv_cond
+                 AND a~vkorg = xvbrk-vkorg
+                 AND a~matnr = LS_VBRP-matnr
+                 AND a~datbi GE xvbrk-fkdat
+                 AND a~datab LE xvbrk-fkdat
+                 AND b~loevm_ko EQ ''.
+                    IF sy-subrc EQ 0.
+                      lv_matnr = LS_VBRP-matnr.
+                      lv_posnr = LS_VBRP-posnr.
+                      CALL FUNCTION 'CONVERSION_EXIT_ALPHA_OUTPUT'
+                        EXPORTING
+                          input  = lv_matnr
+                        IMPORTING
+                          output = lv_matnr.
+                      CALL FUNCTION 'CONVERSION_EXIT_ALPHA_OUTPUT'
+                        EXPORTING
+                          input  = lv_posnr
+                        IMPORTING
+                          output = lv_posnr.
+                        CLEAR lv_text.
+                        CONCATENATE lv_matnr ' & line item:' lv_posnr INTO lv_text.
+                        MESSAGE i000(38) WITH 'Prices not maintained for Batch Number:'LS_VBRP-charg ',Material:' lv_text.
+                      LEAVE TO SCREEN 0.
+                    ENDIF.
+                  ENDIF.
+                ENDIF.
+              ENDIF.
+            ENDIF.
+          ENDIF.
+        ENDIF.
+      ELSEIF lv_cond = 'ZEXP'.
+        SELECT SINGLE a~mandt
+    a~kappl a~kschl a~vkorg a~vtweg a~werks a~kunag a~kunwe
+    a~matnr a~charg a~kfrst a~datbi a~datab a~kbstat
+    a~knumh
+    FROM a941 AS a INNER JOIN konp AS b ON a~knumh EQ b~knumh
+    INTO ls_a941
+  WHERE a~vkorg = xvbrk-vkorg
+    AND a~vtweg = xvbrk-vtweg
+    AND a~werks = LS_VBRP-werks
+    AND a~kunag = xvbrk-kunag
+    AND a~kunwe = likp-kunnr
+    AND a~matnr = LS_VBRP-matnr
+    AND a~charg = LS_VBRP-charg
+    AND a~datbi GE xvbrk-fkdat
+    AND a~datab LE xvbrk-fkdat
+    AND b~loevm_ko EQ ''.
+        IF sy-subrc NE 0.
+          SELECT SINGLE a~mandt
+a~kappl a~kschl a~vkorg a~vtweg a~werks a~kunag
+a~kunwe a~matnr a~kfrst a~datbi a~datab a~kbstat
+a~knumh
+FROM a942 AS a INNER JOIN konp AS b ON a~knumh EQ b~knumh
+INTO ls_a942
+WHERE a~vkorg = xvbrk-vkorg
+AND a~vtweg = xvbrk-vtweg
+AND a~werks = LS_VBRP-werks
+AND a~kunag = xvbrk-kunag
+AND a~kunwe = likp-kunnr
+AND a~matnr = LS_VBRP-matnr
+AND a~datbi GE xvbrk-fkdat
+AND a~datab LE xvbrk-fkdat
+AND b~loevm_ko EQ ''.
+          IF sy-subrc NE 0.
+            SELECT SINGLE a~mandt
+a~kappl a~kschl a~vkorg a~vtweg a~werks a~kunag a~matnr
+a~charg a~kfrst a~datbi a~datab a~kbstat a~knumh
+FROM a943 AS a INNER JOIN konp AS b ON a~knumh EQ b~knumh
+INTO ls_a943
+WHERE a~vkorg = xvbrk-vkorg
+AND a~vtweg = xvbrk-vtweg
+AND a~werks = LS_VBRP-werks
+AND a~kunag = xvbrk-kunag
+AND a~matnr = LS_VBRP-matnr
+AND a~charg = LS_VBRP-charg
+AND a~datbi GE xvbrk-fkdat
+AND a~datab LE xvbrk-fkdat
+AND b~loevm_ko EQ ''.
+            IF sy-subrc NE 0.
+              SELECT SINGLE a~mandt
+  a~kappl a~kschl a~vkorg a~vtweg a~werks a~kunag
+  a~matnr a~kfrst a~datbi a~datab a~kbstat a~knumh
+  FROM a944 AS a INNER JOIN konp AS b ON a~knumh EQ b~knumh
+  INTO ls_a944
+WHERE a~vkorg = xvbrk-vkorg
+  AND a~vtweg = xvbrk-vtweg
+  AND a~werks = LS_VBRP-werks
+  AND a~kunag = xvbrk-kunag
+  AND a~matnr = LS_VBRP-matnr
+  AND a~datbi GE xvbrk-fkdat
+  AND a~datab LE xvbrk-fkdat
+  AND b~loevm_ko EQ ''.
+              IF sy-subrc NE 0.
+                SELECT SINGLE a~mandt
+    a~kappl a~kschl a~vkorg a~vtweg a~werks a~matnr
+    a~charg a~kfrst a~datbi a~datab a~kbstat a~knumh
+    FROM a945 AS a INNER JOIN konp AS b ON a~knumh EQ b~knumh
+    INTO ls_a945
+  WHERE a~vkorg = xvbrk-vkorg
+    AND a~vtweg = xvbrk-vtweg
+    AND a~werks = LS_VBRP-werks
+    AND a~matnr = LS_VBRP-matnr
+    AND a~charg = LS_VBRP-charg
+    AND a~datbi GE xvbrk-fkdat
+    AND a~datab LE xvbrk-fkdat
+    AND b~loevm_ko EQ ''.
+                IF sy-subrc NE 0.
+                  SELECT SINGLE a~mandt
+                           a~kappl a~kschl a~vkorg a~matnr a~charg
+                           a~kfrst a~datbi a~datab a~kbstat a~knumh
+                          FROM a603
+                          AS a INNER JOIN konp AS b ON a~knumh EQ b~knumh
+                         INTO ls_a603
+                      WHERE a~kschl = lv_cond
+                        AND a~vkorg = xvbrk-vkorg
+                        AND a~matnr = LS_VBRP-matnr
+                        AND a~charg = LS_VBRP-charg
+                        AND a~datbi GE xvbrk-fkdat
+                        AND a~datab LE xvbrk-fkdat
+                        AND b~loevm_ko EQ ''.
+                  IF sy-subrc NE 0.
+                    SELECT SINGLE a~mandt
+                  a~kappl a~kschl a~vkorg a~vtweg a~werks a~matnr
+                  a~kfrst a~datbi a~datab a~kbstat a~knumh
+                  FROM a946 AS a INNER JOIN konp AS b ON a~knumh EQ b~knumh
+                  INTO ls_a946
+                WHERE a~vkorg = xvbrk-vkorg
+                  AND a~vtweg = xvbrk-vtweg
+                  AND a~werks = LS_VBRP-werks
+                  AND a~matnr = LS_VBRP-matnr
+                  AND a~datbi GE xvbrk-fkdat
+                  AND a~datab LE xvbrk-fkdat
+                  AND b~loevm_ko EQ ''.
+                    IF sy-subrc NE 0.
+                      SELECT SINGLE a~mandt
+                                 a~kappl a~kschl a~vkorg a~matnr a~kfrst
+                                 a~datbi a~datab a~kbstat a~knumh
+                                 FROM  a991
+                                 AS a INNER JOIN konp AS b ON a~knumh EQ b~knumh
+                                INTO ls_a991
+                              WHERE a~kschl = lv_cond
+                            AND a~vkorg = xvbrk-vkorg
+                            AND a~matnr = LS_VBRP-matnr
+                            AND a~datbi GE xvbrk-fkdat
+                            AND a~datab LE xvbrk-fkdat
+                            AND b~loevm_ko EQ ''.
+                      IF sy-subrc EQ 0.
+                        lv_matnr = LS_VBRP-matnr.
+                        lv_posnr = LS_VBRP-posnr.
+                        CALL FUNCTION 'CONVERSION_EXIT_ALPHA_OUTPUT'
+                          EXPORTING
+                            input  = lv_matnr
+                          IMPORTING
+                            output = lv_matnr.
+                        CALL FUNCTION 'CONVERSION_EXIT_ALPHA_OUTPUT'
+                          EXPORTING
+                            input  = lv_posnr
+                          IMPORTING
+                            output = lv_posnr.
+                        CLEAR lv_text.
+                        CONCATENATE lv_matnr ' & line item:' lv_posnr INTO lv_text.
+                        MESSAGE i000(38) WITH 'Prices not maintained for Batch Number:'LS_VBRP-charg ',Material:' lv_text.
+                        LEAVE TO SCREEN 0.
+                      ENDIF.
+                    ENDIF.
+                  ENDIF.
+                ENDIF.
+              ENDIF.
+            ENDIF.
+          ENDIF.
+        ENDIF.
+      ENDIF.
+    ENDIF.
+    CLEAR:LS_VBRP.
+    ENDLOOP.
+  ENDIF.
+ENDIF.
+ENDENHANCEMENT.
+*$*$-End:   (1)---------------------------------------------------------------------------------$*$*
+
+* Example: Number range from TVFK like in standard
+* US_RANGE_INTERN = TVFK-NUMKI.
+
+ENDFORM.
+*eject
+
+*---------------------------------------------------------------------*
+*       FORM USEREXIT_PRICING_PREPARE_TKOMK                           *
+*---------------------------------------------------------------------*
+*       This userexit can be used to move additional fields into the  *
+*       communication table which is used for pricing:                *
+*       TKOMK for header fields                                       *
+*       This form is called from form PREISFINDUNG_VORBEREITEN.       *
+*---------------------------------------------------------------------*
+FORM USEREXIT_PRICING_PREPARE_TKOMK.
+"""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""$"$\SE:(2) Form USEREXIT_PRICING_PREPARE_TKOMK, Start                                                                                                        A
+*$*$-Start: (2)---------------------------------------------------------------------------------$*$*
+ENHANCEMENT 2  ZSD_DL_VALIDATION1.    "active version
+
+
+"added by shaik mastan vali on 18.03.2021
+IF sy-tcode = 'VF01'.
+
+TYPES: BEGIN OF ty_kna12,
+
+          kunnr       TYPE kna1-kunnr ,
+          zlicense1   TYPE kna1-zlicense1,
+          zdate1      TYPE kna1-zdate1,
+          zlicense2   TYPE kna1-zlicense2,
+          zdate2      TYPE kna1-zdate2,
+          zlicense3   TYPE kna1-zlicense3,
+          zdate3      TYPE kna1-zdate3 ,
+       END OF ty_kna12.
+
+
+   DATA: gs_vbrp2 TYPE vbrpvb,
+         gs_kna12 TYPE ty_kna12,
+         lv_kunnr TYPE kna1-kunnr,
+         gs_msg2  TYPE string,
+         gs_msg3  TYPE string,
+         gs_msg6  TYPE string.
+
+  DATA : it_dl TYPE TABLE OF zdrug_license,
+         wa_dl TYPE zdrug_license.
+
+DATA : it_policy TYPE TABLE OF ZPOLICY_DETAIL,
+       wa_policy TYPE ZPOLICY_DETAIL.
+
+DATA : p_date TYPE P0001-BEGDA.
+DATA : lp_date TYPE P0001-BEGDA,
+       year TYPE gjahr,
+       date TYPE char10,
+       c_year TYPE gjahr,
+       flag TYPE char1,
+       vflag TYPE char1.
+
+   LOOP AT xvbrp INTO gs_vbrp2.
+
+     IMPORT vflag FROM  MEMORY id 'DL'.
+*     IF gs_vbrp2-werks = '2200' or gs_vbrp2-werks = '3300'.
+
+     lv_kunnr = gs_vbrp2-werks.
+
+       CALL FUNCTION 'CONVERSION_EXIT_ALPHA_INPUT'
+        EXPORTING
+          input         = lv_kunnr
+       IMPORTING
+         OUTPUT        = lv_kunnr
+                .
+
+
+*    SELECT SINGLE kunnr
+*                  zlicense1
+*                  zdate1
+*                  zlicense2
+*                  zdate2
+*                  zlicense3
+*                  zdate3  FROM kna1 INTO gs_kna12 WHERE kunnr = lv_kunnr.
+
+    SELECT SINGLE * FROM zdrug_license INTO wa_dl WHERE werks = gs_vbrp2-werks  "Added by sathish
+                                                    AND lgort = gs_vbrp2-lgort.
+
+        IF sy-subrc  = 0.
+
+
+*          IF gs_kna12-zdate1 is NOT INITIAL.
+*
+*          IF sy-datum GT gs_kna12-zdate1 .
+
+
+
+          IF wa_dl-datub1 is NOT INITIAL.      "Added by sathish
+
+            IF sy-datum GT wa_dl-datub1 AND  wa_dl-APPLI ne ' ' AND vflag ne 'X'.
+
+            CONCATENATE 'DL no. expires for plant code'  gs_vbrp2-werks
+             '& Storage Loc' gs_vbrp2-lgort
+             'but Application No. is Updated 'INTO gs_msg2.
+
+             MESSAGE gs_msg2 TYPE 'I'.
+             vflag = 'X'.
+
+          ELSEIF sy-datum GT wa_dl-datub1 AND wa_dl-APPLI eq ' ' AND vflag ne 'X'.
+
+            CONCATENATE 'DL no. expires for plant code'  gs_vbrp2-werks 'Storage Loc.' gs_vbrp2-lgort INTO gs_msg2.
+
+            MESSAGE gs_msg2 TYPE 'E'.
+            vflag = 'X'.
+
+         IF wa_dl-APPLI eq ' ' AND vflag ne 'X'.
+         CONCATENATE 'DL no. expires for plant code'  gs_vbrp2-werks 'Storage Loc.' gs_vbrp2-lgort INTO gs_msg3.
+
+         MESSAGE gs_msg3 TYPE 'E'.
+         vflag = 'X'.
+         ENDIF.
+
+          ENDIF.
+          ENDIF.
+
+*         IF gs_kna12-zdate2 is NOT INITIAL.
+*
+*          IF sy-datum GT gs_kna12-zdate2 .
+
+          IF wa_dl-datub2 is NOT INITIAL.      "Added by sathish
+
+          IF sy-datum GT wa_dl-datub2 AND  wa_dl-APPLI ne ' ' AND vflag ne 'X'.
+
+            CONCATENATE 'DL no. expires for plant code'  gs_vbrp2-werks
+             '& Storage Loc' gs_vbrp2-lgort
+             'but Application No. is Updated 'INTO gs_msg2.
+
+             MESSAGE gs_msg2 TYPE 'I'.
+             vflag = 'X'.
+
+          ELSEIF sy-datum GT wa_dl-datub2 AND wa_dl-APPLI eq ' ' AND vflag ne 'X'.
+
+            CONCATENATE 'DL no. expires for plant code'  gs_vbrp2-werks 'Storage Loc.' gs_vbrp2-lgort INTO gs_msg2.
+
+            MESSAGE gs_msg2 TYPE 'E'.
+            vflag = 'X'.
+
+         IF wa_dl-APPLI eq ' ' AND vflag ne 'X'.
+         CONCATENATE 'DL no. expires for plant code'  gs_vbrp2-werks 'Storage Loc.' gs_vbrp2-lgort INTO gs_msg3.
+
+         MESSAGE gs_msg3 TYPE 'E'.
+         vflag = 'X'.
+         ENDIF.
+
+            ENDIF.
+
+         ENDIF.
+
+*
+*        IF gs_kna12-zdate3 is NOT INITIAL.
+*
+*          IF sy-datum GT gs_kna12-zdate3 .
+
+          IF wa_dl-datub3 is NOT INITIAL.      "Added by sathish
+
+        IF sy-datum GT wa_dl-datub3 AND  wa_dl-APPLI ne ' ' AND vflag ne 'X'.
+
+            CONCATENATE 'DL no. expires for plant code'  gs_vbrp2-werks
+             '& Storage Loc' gs_vbrp2-lgort
+             'but Application No. is Updated 'INTO gs_msg2.
+
+             MESSAGE gs_msg2 TYPE 'I'.
+             vflag = 'X'.
+
+          ELSEIF sy-datum GT wa_dl-datub3 AND wa_dl-APPLI eq ' ' AND vflag ne 'X'.
+
+            CONCATENATE 'DL no. expires for plant code'  gs_vbrp2-werks 'Storage Loc.' gs_vbrp2-lgort INTO gs_msg2.
+
+            MESSAGE gs_msg2 TYPE 'E'.
+            vflag = 'X'.
+
+         IF wa_dl-APPLI eq ' ' AND vflag ne 'X'.
+        CONCATENATE 'DL no. expires for plant code'  gs_vbrp2-werks 'Storage Loc.' gs_vbrp2-lgort INTO gs_msg3.
+
+         MESSAGE gs_msg3 TYPE 'E'.
+         vflag = 'X'.
+         ENDIF.
+
+          ENDIF.
+
+       ENDIF.
+
+          IF wa_dl-datub4 is NOT INITIAL.      "Added by sathish
+
+          IF sy-datum GT wa_dl-datub4 AND  wa_dl-APPLI ne ' ' AND vflag ne 'X'.
+
+            CONCATENATE 'DL no. expires for plant code'  gs_vbrp2-werks
+             '& Storage Loc' gs_vbrp2-lgort
+             'but Application No. is Updated 'INTO gs_msg2.
+
+             MESSAGE gs_msg2 TYPE 'I'.
+             vflag = 'X'.
+
+          ELSEIF sy-datum GT wa_dl-datub4 AND wa_dl-APPLI eq ' ' AND vflag ne 'X'.
+
+            CONCATENATE 'DL no. expires for plant code'  gs_vbrp2-werks 'Storage Loc.' gs_vbrp2-lgort INTO gs_msg2.
+
+            MESSAGE gs_msg2 TYPE 'E'.
+           vflag = 'X'.
+
+          IF wa_dl-APPLI eq ' ' AND vflag ne 'X'.
+          CONCATENATE 'DL no. expires for plant code'  gs_vbrp2-werks 'Storage Loc.' gs_vbrp2-lgort INTO gs_msg3.
+         MESSAGE gs_msg3 TYPE 'E'.
+         vflag = 'X'.
+         ENDIF.
+
+          ENDIF.
+
+       ENDIF.
+
+
+        ENDIF.
+
+       EXPORT vflag FROM vflag to MEMORY id 'DL'.
+*     ENDIF.
+
+  SELECT SINGLE * FROM ZPOLICY_DETAIL INTO wa_policy WHERE werks = gs_vbrp2-werks.
+     IF sy-subrc eq 0.
+      IF wa_policy-DATUB is NOT INITIAL.
+
+        p_date = wa_policy-DATUB.
+
+    CONCATENATE WA_POLICY-DATUB+6(2) WA_POLICY-DATUB+4(2) WA_POLICY-DATUB+0(4)
+    INTO DATE SEPARATED BY '.'.
+
+     YEAR = WA_POLICY-DATUB.
+
+      c_year = sy-datum+0(4).
+
+      IF sy-datum GT wa_policy-DATUB .
+
+    CONCATENATE 'Policy expired on   '  DATE  '  for plant code  '  gs_vbrp2-werks INTO gs_msg6.
+
+     MESSAGE gs_msg6 TYPE 'E'.
+
+    ENDIF.
+
+    if year = c_year.
+
+    CALL FUNCTION 'RP_CALC_DATE_IN_INTERVAL'
+      EXPORTING
+        date            = p_date
+        days            = '0'
+        months          = '01'
+        SIGNUM          = '-'
+        years           = '0'
+     IMPORTING
+       CALC_DATE       = lp_date
+              .
+    IMPORT flag FROM  MEMORY id 'POLICY'.
+
+    if WA_POLICY-DATUB+4(2) eq sy-datum+4(2) or lp_date+4(2) eq sy-datum+4(2).
+    IF lp_date le wa_policy-DATUB AND flag ne 'X' .
+
+    CONCATENATE 'Policy Going to be expired on  '  DATE  '  for plant code  '  gs_vbrp2-werks INTO gs_msg6.
+
+     MESSAGE gs_msg6 TYPE 'I'.
+      flag = 'X'.
+      EXPORT flag FROM flag to MEMORY id 'POLICY'.
+      ENDIF.
+      ENDIF.
+
+   ENDIF.
+   ENDIF.
+   ENDIF.
+
+   ENDLOOP.
+
+
+ ENDIF.
+
+"added by shaik mastan vali on 18.03.2021
+
+" Begin of changes 09/21/2021 TR # DEVK916621
+*  BREAK-POINT.
+
+**    INCLUDE Zvalidate_fortrade.
+
+" End of changes 09/21/2021 TR # DEVK916621
+ENDENHANCEMENT.
+*$*$-End:   (2)---------------------------------------------------------------------------------$*$*
+
+* TKOMK-zzfield = xxxx-zzfield2.
+
+* TKOMK-KUNRE = XVBPA_RE-KUNNR.
+* TKOMK-KUNWE = XVBPA_WE-KUNNR.
+* TKOMK-KNRZE = XVBPA_RG-KUNNR.
+
+* PERFORM XVBPA_SELECT USING 'VE'.
+* TKOMK-VRTNR = XVBPA-PERNR.
+
+* PERFORM XVBPA_SELECT USING 'SP'.
+* TKOMK-SPDNR = XVBPA-LIFNR.
+
+* PERFORM XVBPA_SELECT USING 'AP'.
+* TKOMK-PARNR = XVBPA-PARNR.
+
+ENDFORM.
+*eject
+
+*---------------------------------------------------------------------*
+*       FORM USEREXIT_PRICING_PREPARE_TKOMP                           *
+*---------------------------------------------------------------------*
+*       This userexit can be used to move additional fields into the  *
+*       communication table which is used for pricing:                *
+*       TKOMP for item fields                                         *
+*       This form is called from form PREISFINDUNG_VORBEREITEN.       *
+*---------------------------------------------------------------------*
+FORM USEREXIT_PRICING_PREPARE_TKOMP.
+
+*  TKOMP-zzfield = xxxx-zzfield2.
+
+ENDFORM.
+*eject
+
+
+
+"""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""$"$\SE:(3) Include RV60AFZZ, End                                                                                                                             S
+*$*$-Start: (3)---------------------------------------------------------------------------------$*$*
+ENHANCEMENT 1  ZZVF01_USEREXIT_SAVE_DOCUMENT.    "active version
+FORM userexit_save_document_prepare.
+*IF 1 = 2.
+DATA: ls_bapihead TYPE bapibatchkey,
+      lv_batch    TYPE bapibatchkey-batch,
+      lv_sloc     TYPE lgort_d,
+      ls_ymb501   TYPE ymb501,
+      wa_mchb     TYPE mchb.
+
+DATA: lt_return TYPE TABLE OF bapiret2 WITH HEADER LINE.
+IF sy-tcode = 'VF01' and
+   xvbrk-fkart = 'ZDSF'.
+  SELECT SINGLE *
+         INTO ls_ymb501
+         FROM ymb501
+         WHERE kunnr = xvbrk-kunag.
+  IF sy-subrc EQ 0.
+    LOOP AT xvbrp.
+      CLEAR: ls_bapihead,
+             lt_return[],
+             lv_sloc.
+
+      CLEAR wa_mchb.
+      SELECT SINGLE * FROM mchb INTO wa_mchb
+      WHERE matnr EQ xvbrp-matnr AND
+            werks EQ ls_ymb501-werks AND
+            lgort EQ ls_ymb501-lgort AND
+            charg EQ xvbrp-charg.
+      CHECK: sy-subrc NE 0.
+
+      ls_bapihead-material = xvbrp-matnr.
+      ls_bapihead-batch    = xvbrp-charg.
+      ls_bapihead-plant    = ls_ymb501-werks.
+      lv_sloc              = ls_ymb501-lgort.
+
+      CALL FUNCTION 'BAPI_BATCH_CREATE'
+        EXPORTING
+          material             = ls_bapihead-material
+          batch                = ls_bapihead-batch
+          plant                = ls_bapihead-plant
+*         BATCHATTRIBUTES      =
+*         BATCHCONTROLFIELDS   =
+          batchstoragelocation = lv_sloc
+*         INTERNALNUMBERCOM    =
+*         EXTENSION1           =
+*         MATERIAL_EVG         =
+        IMPORTING
+          batch                = lv_batch
+*         BATCHATTRIBUTES      =
+        TABLES
+          return               = lt_return.
+
+      READ TABLE lt_return
+        WITH KEY type   = 'S'
+                 id     = '12'
+                 number = '128'.
+      IF sy-subrc EQ 0.
+        CALL FUNCTION 'BAPI_TRANSACTION_COMMIT'
+          EXPORTING
+            wait = 'X'.
+      ELSE.
+
+        CALL FUNCTION 'BAPI_TRANSACTION_ROLLBACK'.
+      ENDIF.
+
+  ENDLOOP.
+ ENDIF.
+ if 1 = 2.
+   PERFORM update_za945.
+ endif.
+ENDIF.
+*ENDIF.
+ENDFORM.
+
+FORM update_za945.
+  DATA : lt_xvbrp TYPE TABLE OF vbrpvb,
+         ls_xvbrp TYPE vbrpvb,
+         lt_xvbrk TYPE TABLE OF vbrkvb,
+         ls_xvbrk TYPE vbrkvb,
+         lt_xkomv TYPE TABLE OF komv,
+         ls_xkomv TYPE komv.
+
+  DATA : wa_za945   TYPE za945,
+         it_za945   TYPE STANDARD TABLE OF za945,
+         wa_za945_d TYPE za945,
+         it_za945_d TYPE STANDARD TABLE OF za945,
+         wa_za945_u TYPE za945,
+         it_za945_u TYPE STANDARD TABLE OF za945.
+
+  lt_xvbrp = xvbrp[].
+  lt_xvbrk = xvbrk[].
+  lt_xkomv = xkomv[].
+  ls_xvbrk = xvbrk.
+
+  LOOP AT lt_xvbrp INTO ls_xvbrp.
+*    MOVE-CORRESPONDING ls_xvbrp TO wa_za945.
+    wa_za945-charg = ls_xvbrp-charg.
+    wa_za945-matnr = ls_xvbrp-matnr.
+    wa_za945-spart = ls_xvbrp-spart.
+    wa_za945-vkorg = ls_xvbrk-vkorg.
+    wa_za945-vtweg = ls_xvbrk-vtweg.
+    wa_za945-werks = ls_xvbrp-werks.
+    wa_za945-matnr = ls_xvbrp-matnr.
+    CALL FUNCTION 'CONVERSION_EXIT_ALPHA_INPUT'
+      EXPORTING
+        input  = wa_za945-matnr
+      IMPORTING
+        output = wa_za945-matnr.
+
+    LOOP AT lt_xkomv INTO ls_xkomv
+                     WHERE "knumv = ls_xvbrk-knumv AND
+                           kposn = ls_xvbrp-posnr.
+      CASE ls_xkomv-kschl.
+        WHEN 'YPTD'.
+          wa_za945-yptd = ls_xkomv-kwert / ls_xvbrp-fkimg.
+        WHEN 'ZK08' OR 'ZG08'.
+          wa_za945-ypts = ls_xkomv-kwert / ls_xvbrp-fkimg.
+        WHEN 'YPTR'.
+          wa_za945-yptr = ls_xkomv-kwert / ls_xvbrp-fkimg.
+        WHEN 'YMRP'.
+          wa_za945-ymrp = ls_xkomv-kwert / ls_xvbrp-fkimg.
+      ENDCASE.
+    ENDLOOP.
+    APPEND wa_za945 TO it_za945.
+  ENDLOOP.
+  IF sy-subrc EQ 0.
+    SORT it_za945 BY matnr charg.
+    DELETE it_za945 WHERE yptd IS INITIAL.
+    DELETE ADJACENT DUPLICATES FROM it_za945
+                    COMPARING matnr charg.
+    IF NOT it_za945 IS INITIAL.
+      SELECT * FROM za945 INTO TABLE it_za945_d
+               FOR ALL ENTRIES IN it_za945
+               WHERE vkorg = it_za945-vkorg AND
+                     vtweg = it_za945-vtweg AND
+                     spart = it_za945-spart AND
+                     werks = it_za945-werks AND
+                     matnr = it_za945-matnr AND
+                     charg = it_za945-charg.
+      IF sy-subrc EQ 0.
+        LOOP AT it_za945_d into wa_za945.
+          READ TABLE it_za945 TRANSPORTING NO FIELDS
+                                WITH KEY vkorg = wa_za945-vkorg
+                                         vtweg  = wa_za945-vtweg
+                                         spart  = wa_za945-spart
+                                         werks  = wa_za945-werks
+                                         matnr  = wa_za945-matnr
+                                         charg  = wa_za945-charg.
+          IF sy-subrc EQ 0.
+            DELETE it_za945 .
+          ELSE.
+            APPEND wa_za945 TO it_za945_u.
+          ENDIF.
+        ENDLOOP.
+        IF NOT it_za945 IS INITIAL.
+          INSERT za945 FROM TABLE it_za945.
+          IF sy-subrc = 0.
+            COMMIT WORK AND WAIT.
+          ENDIF.
+        ENDIF.
+
+        IF NOT it_za945_u IS INITIAL.
+          UPDATE za945 FROM TABLE it_za945_u.
+          IF sy-subrc = 0.
+            COMMIT WORK AND WAIT.
+          ENDIF.
+        ENDIF.
+      ENDIF.
+
+    ENDIF.
+  ENDIF.
+
+ENDFORM.
+ENDENHANCEMENT.
+*$*$-End:   (3)---------------------------------------------------------------------------------$*$*
