@@ -1,0 +1,38 @@
+Code:
+1.  Add the custom fields to VA05 report
+2.  
+
+
+***INCLUDE V05TZZMO .
+* This form is called in the include LV05TFMO.
+FORM MOVE_USERFIELDS USING ZP.
+  CASE ZP.
+    WHEN 'VBAK'.
+*     header
+*     MOVE LVBAK-XXXXX TO LVBMTV-ZZXXXXX.
+
+    WHEN 'VBAP'.
+*     item
+*     MOVE LVBAP-XXXXX TO LVBMTV-ZZXXXXX.
+    WHEN 'VBEP'.
+*     schedule line
+*     MOVE LVBEP-XXXXX TO LVBMTV-ZZXXXXX.
+
+
+  ENDCASE.
+"""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""$"$\SE:(1) Form MOVE_USERFIELDS, End                                                                                                                         A
+*$*$-Start: (1)---------------------------------------------------------------------------------$*$*
+ENHANCEMENT 1  ZZ_V05TZZMO.    "active version
+
+    CASE ZP.
+      WHEN 'VBAK'.
+        SELECT KUNNR FROM VBPA
+               INTO LVBMTV-KUNNR_S
+               UP TO 1 ROWS
+               WHERE VBELN = LVBAK-VBELN AND
+                     PARVW = 'WE'.
+        ENDSELECT.
+    ENDCASE.
+ENDENHANCEMENT.
+*$*$-End:   (1)---------------------------------------------------------------------------------$*$*
+ENDFORM.
