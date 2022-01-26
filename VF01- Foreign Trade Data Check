@@ -1,0 +1,69 @@
+FUNCTION EXIT_SAPLV50E_005.
+*"----------------------------------------------------------------------
+*"*"Lokale Schnittstelle:
+*"       IMPORTING
+*"             VALUE(I_EXP_IMP_FLAG) LIKE  RL50E-K_FLAG DEFAULT 'E'
+*"             VALUE(I_EXPORT_HEADER) LIKE  EIKP STRUCTURE  EIKP
+*"                             DEFAULT ' '
+*"       CHANGING
+*"             VALUE(C_COMPLETE) LIKE  RL50E-K_FLAG DEFAULT ' '
+*"----------------------------------------------------------------------
+
+
+  INCLUDE ZXV50U05.
+
+
+ENDFUNCTION.
+*&---------------------------------------------------------------------*
+*&  Include           ZXV50U05
+*&---------------------------------------------------------------------*
+
+*IF sy-tcode = 'VF01' OR sy-tcode = 'VF02'.
+IF sy-tcode = 'VF01'. " OR sy-tcode = 'VF02'.
+  IF i_export_header-refnr IS INITIAL.        " New record.
+    IF i_export_header-expvz IS INITIAL AND sy-ucomm = 'SICH'.
+      MESSAGE 'Pls enter the transport boarder in for trade/customs' TYPE 'E'.
+    ELSEIF i_export_header-iever IS INITIAL AND sy-ucomm = 'SICH'.
+      MESSAGE 'Pls enter the transport mode in for trade/customs' TYPE 'E'.
+    ELSEIF i_export_header-zolla IS INITIAL AND sy-ucomm = 'SICH'.
+      MESSAGE  'Pls enter the geography data in for trade/customs' TYPE 'E'.
+    ENDIF.
+  ENDIF.
+ELSEIF sy-tcode = 'VF02' AND sy-ucomm = 'SICH'.
+  DATA lc_vbrk TYPE char40 VALUE '(SAPMV60A)VBRK'.
+  DATA lc_eikp TYPE char40 VALUE '(SAPLV50E)XEIKP[]'.
+  DATA lv_refnr TYPE char40 VALUE 'REFNR'.
+  FIELD-SYMBOLS <ls_vbrk> TYPE any.
+  FIELD-SYMBOLS <lt_eikp> TYPE STANDARD TABLE .
+  FIELD-SYMBOLS <ls_eikp> TYPE eikpvb.
+  FIELD-SYMBOLS <lv_val> TYPE any.
+  ASSIGN (lc_vbrk) TO <ls_vbrk>.
+  ASSIGN (lc_eikp) TO <lt_eikp> .
+  IF <ls_vbrk> IS ASSIGNED.
+    ASSIGN COMPONENT 'VBELN' OF STRUCTURE <ls_vbrk> TO <lv_val>.
+    IF <lv_val> IS ASSIGNED.
+      IF i_export_header-refnr = <lv_val>."IS INITIAL.        " New record.
+        IF i_export_header-expvz IS INITIAL.
+          MESSAGE 'Pls enter the transport boarder in for trade/customs' TYPE 'E'.
+        ELSEIF i_export_header-iever IS INITIAL.
+          MESSAGE 'Pls enter the transport mode in for trade/customs' TYPE 'E'.
+        ELSEIF i_export_header-zolla IS INITIAL .
+          MESSAGE  'Pls enter the geography data in for trade/customs' TYPE 'E'.
+        ENDIF.
+      ENDIF.
+*      IF <lt_eikp> IS ASSIGNED.
+*        READ TABLE <lt_eikp> ASSIGNING <ls_eikp>
+*                             WITH KEY (lv_refnr) = <lv_val>.
+*        IF <ls_eikp> IS ASSIGNED.
+*          IF <ls_eikp>-expvz IS INITIAL .
+*            MESSAGE 'Pls enter the transport boarder in for trade/customs' TYPE 'E'.
+*          ELSEIF <ls_eikp>-iever IS INITIAL .
+*            MESSAGE 'Pls enter the transport mode in for trade/customs' TYPE 'E'.
+*          ELSEIF <ls_eikp>-zolla IS INITIAL .
+*            MESSAGE  'Pls enter the geography data in for trade/customs' TYPE 'E'.
+*          ENDIF.
+*        ENDIF.
+*      ENDIF.
+    ENDIF.
+  ENDIF.
+ENDIF.
