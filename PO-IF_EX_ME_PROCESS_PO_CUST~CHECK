@@ -1,0 +1,303 @@
+
+Requirement:
+We are in requirement of logic in the SAP system while issuing/saving purchase orders for Company code 1000, System will not issue/save purchase order for Material types ROH/VERP If the PR field is not maintained in T-code ME21N & ME22N.
+
+
+Solution:
+
+For putting validation on T-codes ME21N& ME22N following points to be taken in consideration:
+-	Company code (BUKRS): 1000 (hard code)
+-	Material types (MTART): ROH & VERP (hard code)
+
+The user will not be able to create/change the PO for the material types: ROH & VERP if the PR is not there in PO
+
+Logic:
+
+While saving the PO in ME21N/ME22N, if found the screen field value BUKRS as 1000 then pass screen field MATNR(Material) in MARA table if not found any of the MTART field value as ROH or VERP then exit & if found any of the MTART (Material type) field value as ROH or VERP then check for the screen field Purchase Requisition (BANFN) if found the BANFN field value blank for the PO line item then don’t allow to SAVE the PO.
+
+
+Test data: ROH material type
+
+PO document type: YNB
+Vendor: 101147
+Purch org:1000
+Purch group:101
+Company code:1000
+Material: ATLAS100000125
+Plant:1000
+
+
+Test data: VERP material type
+
+PO document type: YDPO
+Vendor: 100029
+Purch org:1000
+Purch group:102
+Company code:1000
+Material: 200000263
+Plant:1400
+
+
+
+
+
+Code: this code will trigger in While saving the button
+________
+________
+
+  METHOD if_ex_me_process_po_cust~check.
+
+
+*****TYPES: BEGIN OF ty_ekko,
+*****       ebeln TYPE ebeln,
+*****       bukrs TYPE bukrs,
+*****       lifnr TYPE ELIFN,
+*****       zterm TYPE DZTERM,
+*****       END OF ty_ekko.
+*****
+*****DATA: it_ekko TYPE TABLE OF ty_ekko,
+*****      wa_ekko TYPE ty_ekko,
+*****      it_ekko1 TYPE TABLE OF ty_ekko,
+*****      wa_ekko1 TYPE ty_ekko,
+*****      it_ZMM TYPE STANDARD TABLE OF ZMM_VALIDATION,
+*****      wa_ZMM TYPE ZMM_VALIDATION,
+*****      lv_count TYPE zcount.
+*****
+*****DATA : wa_fin TYPE ty_ekko,
+*****       it_fin TYPE ty_ekko.
+*****
+*****DATA : lv_header TYPE mepoheader,
+*****       Counter TYPE I,
+*****       lv_text TYPE string.
+******START-OF-SELECTION.
+*****clear : lv_header, counter.
+*****lv_header = im_header->get_data( ).
+*****
+*****refresh : IT_EKKO.
+*****clear : wa_ekko.
+*****select ebeln bukrs lifnr zterm
+*****FROM ekko
+*****INTO TABLE it_ekko
+*****WHERE LIFNR = lv_header-LIFNR
+******  AND zterm = lv_header-zterm
+*****  AND bukrs = '3000'.
+*****SORT it_ekko DESCENDING.
+*****
+*****do 5 TIMES.
+***** read TABLE it_ekko INTO wa_ekko INDEX sy-index.
+***** wa_ekko1 = wa_ekko.
+***** APPEND wa_ekko1 TO it_ekko1.
+***** enddo.
+*****
+*****
+****** LOOP AT it_ekko INTO wa_ekko." INDEX sy-index.
+****** wa_ekko1 = wa_ekko.
+****** APPEND wa_ekko1 TO it_ekko1.
+******ENDLOOP.
+*****
+*****
+*****
+*****
+***** delete ADJACENT DUPLICATES FROM it_ekko1 COMPARING EBELN.
+*****
+*****clear : counter.
+*****  LOOP AT it_ekko1 INTO wa_ekko1 where zterm eq lv_header-zterm.
+*****    Counter = counter + 1.
+*****  ENDLOOP.
+*****
+******IF counter >= 3.
+*****IF counter = 3.
+******  if counter LT 5.
+*****
+******  MESSAGE E000(ZMM_VALIDATION) with lv_header-LIFNR DISPLAY LIKE 'W'.
+*****
+******  LEAVE TO LIST-PROCESSING.
+*****
+******ENDIF.
+*****
+*****lv_text = 'Do You Want To Change Vendor Payment Term'.
+*****
+*****data : p_w_conf_msg(50) TYPE C,
+*****       p_wa_answer(50) TYPE C.
+*****
+*****p_w_conf_msg = 'Do You Want To Change Vendor Payment Term'.
+*****p_wa_answer = 'Please Change the ZTERMS'.
+*****DATA : Answer TYPE Char1.
+*****
+*****CALL FUNCTION 'POPUP_TO_CONFIRM'
+*****  EXPORTING
+*****   TITLEBAR                    = lv_text
+******   DIAGNOSE_OBJECT             = ' '
+*****    text_question               = p_w_conf_msg
+*****   TEXT_BUTTON_1               = 'Yes'(002)
+******   ICON_BUTTON_1               = ' '
+*****   TEXT_BUTTON_2               = 'No'(005)
+******   ICON_BUTTON_2               = ' '
+*****   DEFAULT_BUTTON              = '1'
+*****   DISPLAY_CANCEL_BUTTON       = ' '
+******   USERDEFINED_F1_HELP         = ' '
+******   START_COLUMN                = 25
+******   START_ROW                   = 6
+******   POPUP_TYPE                  =
+******   IV_QUICKINFO_BUTTON_1       = ' '
+******   IV_QUICKINFO_BUTTON_2       = ' '
+***** IMPORTING
+*****   ANSWER                      = answer "p_wa_answer
+****** TABLES
+******   PARAMETER                   =
+***** EXCEPTIONS
+*****   TEXT_NOT_FOUND              = 1
+*****   OTHERS                      = 2
+*****          .
+*****IF sy-subrc <> 0.
+****** Implement suitable error handling here
+*****ENDIF.
+*****
+*****IF Answer = 1.  "'TEXT_BUTTON_1'.
+*****  LEAVE LIST-PROCESSING.
+******  EXIT.
+******  LEAVE TO SCREEN 2.
+*****ENDIF.
+*****
+*****ENDIF.
+***********BOC By Sathish**************
+    DATA : wa_items_line TYPE purchase_order_item,
+           wa_items      TYPE REF TO if_purchase_order_item_mm,
+           i_items       TYPE purchase_order_items,
+           wa_ekpo1      TYPE mepoitem,
+           it_ekpo1      TYPE TABLE OF mepoitem,
+           wa_header     TYPE mepoheader.
+
+    DATA : ls_ekko TYPE ebeln,
+           c_ekko  TYPE ekko.
+
+    DATA : it_qa   TYPE TABLE OF zcheckmark_qa,
+           wa_qa   TYPE zcheckmark_qa,
+           v_mtart TYPE mara-mtart,
+           v_loekz TYPE ekpo-loekz.
+
+    DATA ls_header TYPE mepoheader.
+    DATA lv_message TYPE string.
+
+    CALL METHOD im_header->get_data
+      RECEIVING
+        re_data = wa_header.
+
+    ls_ekko = wa_header.
+
+    ls_header = wa_header.
+
+    CALL METHOD im_header->get_items
+      RECEIVING
+        re_items = i_items.
+
+
+    REFRESH it_ekpo1.
+    CLEAR wa_ekpo1.
+
+    DATA: wa_uname TYPE zmm_grn_uname.
+
+    SELECT SINGLE * FROM zmm_grn_uname INTO wa_uname WHERE uname EQ sy-uname.
+
+    IF sy-subrc NE 0.
+
+      LOOP AT i_items INTO wa_items_line.
+
+        wa_items = wa_items_line-item.
+* Get Item Data
+        CALL METHOD wa_items->get_data
+          RECEIVING
+            re_data = wa_ekpo1.
+
+        APPEND wa_ekpo1 TO it_ekpo1.
+
+      ENDLOOP.
+
+
+      IF sy-tcode = 'ME22N'.
+
+        IF wa_header-bukrs = '1000'.
+
+          LOOP AT it_ekpo1 INTO wa_ekpo1.
+
+            SELECT SINGLE mtart FROM mara INTO v_mtart WHERE matnr = wa_ekpo1-ematn.
+            IF v_mtart = 'HERS'.
+
+              SELECT SINGLE loekz FROM ekpo INTO v_loekz WHERE ebeln = wa_ekpo1-ebeln
+                                                           AND ebelp = wa_ekpo1-ebelp.
+              IF v_loekz = 'L'.
+                DELETE FROM zcheckmark_qa WHERE ebeln = wa_ekpo1-ebeln AND ebelp = wa_ekpo1-ebelp.
+              ELSE.
+                wa_qa-ebeln = wa_ekpo1-ebeln.
+                wa_qa-ebelp = wa_ekpo1-ebelp.
+                wa_qa-werks = wa_ekpo1-werks.
+                wa_qa-matnr = wa_ekpo1-matnr.
+                wa_qa-mfrnr = wa_ekpo1-mfrnr.
+                wa_qa-bedat = wa_header-bedat.
+                APPEND wa_qa TO it_qa.
+              ENDIF.
+            ENDIF.
+            CLEAR: wa_qa,v_mtart,v_loekz,wa_ekpo1.
+          ENDLOOP.
+
+*          IF it_qa IS NOT INITIAL.
+*            MODIFY zcheckmark_qa FROM TABLE it_qa.
+*          ENDIF.
+
+        ENDIF.
+      ENDIF.
+    ENDIF.
+*************************************
+
+    IF ( sy-tcode = 'ME21N' OR sy-tcode = 'ME22N' ) AND ( sy-ucomm = 'OPT1' OR sy-ucomm = 'MESAVE' OR sy-ucomm = 'MESAVEPR').
+
+      DATA : ls_plant TYPE zmm_plnt_mgp_val.
+      DATA : ls_mara TYPE mara.
+      DATA : w_mtart TYPE mara-mtart.
+
+*      ls_mepoheader2  = im_item->get_header( ).
+*      ls_header2 = ls_mepoheader->get_data( ).
+*      ls_mepoitem2 = im_item->get_data( ).
+
+      LOOP AT it_ekpo1 INTO wa_ekpo1.
+        SELECT SINGLE mtart FROM mara INTO w_mtart WHERE matnr = wa_ekpo1-ematn.
+
+        IF w_mtart = 'ROH'.
+
+          SELECT SINGLE * FROM zmm_plnt_mgp_val INTO ls_plant
+            WHERE werks = wa_ekpo1-werks
+              AND matkl = wa_ekpo1-matkl.
+
+          IF ls_plant-werks IS NOT INITIAL AND ls_plant-matkl IS NOT INITIAL.
+            SELECT SINGLE * FROM mara INTO ls_mara
+              WHERE matnr = wa_ekpo1-ematn.
+
+            IF ls_mara-mfrnr IS INITIAL OR ls_mara-bmatn IS INITIAL.
+              MESSAGE 'Approved Vendor is not maintained' TYPE 'E'.
+*              LEAVE TO LIST-PROCESSING.
+            ENDIF.
+          ENDIF.
+        ENDIF.
+
+      ENDLOOP.
+    ENDIF.
+
+    " ++ begin of change ladevabaper1 dt:11/03/2022
+    IF sy-tcode = 'ME21N' OR
+       sy-tcode = 'ME22N'.
+      IF ls_header-bukrs = '1000'.
+        LOOP AT it_ekpo1 INTO wa_ekpo1.
+          IF ( wa_ekpo1-mtart = 'ROH' OR
+               wa_ekpo1-mtart = 'VERP' ) AND
+               wa_ekpo1-banfn IS INITIAL.
+            CONCATENATE 'Purchase Requisition should not be blank for-'
+                        ls_header-bukrs '/' wa_ekpo1-mtart INTO lv_message.
+            MESSAGE lv_message TYPE 'E'.
+            LEAVE TO LIST-PROCESSING.
+          ENDIF.
+        ENDLOOP.
+      ENDIF.
+
+    ENDIF.
+    " ++ End of change ladevabaper1 dt:11/03/2022
+  ENDMETHOD.
