@@ -1,0 +1,18 @@
+ METHOD if_ex_me_hold_po~is_allowed.
+    DATA wa_ekpo1 TYPE bekpo.
+    IF sy-tcode = 'ME21N' OR
+      sy-tcode = 'ME22N'.
+      IF im_ekko-bukrs = '1000'.
+        LOOP AT im_bekpo INTO wa_ekpo1.
+          IF ( wa_ekpo1-mtart = 'ROH' OR
+               wa_ekpo1-mtart = 'VERP' ) AND
+               wa_ekpo1-banfn IS INITIAL AND
+               wa_ekpo1-item_with_error EQ abap_true.
+            CLEAR ch_allowed.
+          ENDIF.
+        ENDLOOP.
+      ENDIF.
+    ENDIF.
+*    CLEAR ch_allowed.
+*    BREAK-POINT.
+  ENDMETHOD.
