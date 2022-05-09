@@ -1,0 +1,1190 @@
+  METHOD if_ex_me_process_po_cust~process_item.
+*  BREAK abap.
+    DATA : wa_headtab TYPE mepoheader,
+           im_header  TYPE REF TO if_purchase_order_mm,
+           wa_itemtab TYPE mepoitem.
+
+    DATA :  i_items1       TYPE purchase_order_items,
+            wa_ekp         TYPE mepoitem,
+            it_ekp         TYPE TABLE OF mepoitem,
+            wa_items_line1 TYPE purchase_order_item,
+            wa_items1      TYPE REF TO if_purchase_order_item_mm.
+
+    DATA : cl_po TYPE REF TO cl_po_header_handle_mm.
+
+    TYPES : BEGIN OF w_tab,
+              infnr TYPE eina-infnr,
+              matnr TYPE eina-matnr,
+              lifnr TYPE eina-lifnr,
+              werks TYPE eine-werks,
+            END OF w_tab.
+
+**Begin of changes by ramya on 10 Aug 2021.
+
+    TYPES:BEGIN OF gty_a991,
+            kappl  TYPE kappl,
+            kschl  TYPE kscha,
+            charg  TYPE charg_d,
+            matnr  TYPE matnr,
+            werks  TYPE werks_d,
+            lifnr  TYPE elifn,
+            kfrst  TYPE kfrst,
+            datbi  TYPE kodatbi,
+            datab  TYPE kodatab,
+            kbstat TYPE kbstat,
+            knumh  TYPE knumh,
+          END OF gty_a991,
+
+          BEGIN OF ty_eine,
+            infnr	TYPE infnr,
+            ekorg	TYPE ekorg,
+            esokz	TYPE esokz,
+            werks	TYPE ewerk,
+            loekz	TYPE iloee,
+            erdat	TYPE erdat,
+            ernam	TYPE ernam,
+            ekgrp	TYPE bkgrp,
+          END OF ty_eine,
+
+          BEGIN OF gty_konp,
+            knumh TYPE knumh,
+            kopos TYPE kopos,
+            kappl TYPE  kappl,
+            kschl TYPE kscha,
+            kbetr TYPE kbetr_kond,
+          END OF gty_konp.
+
+    DATA: git_a991 TYPE STANDARD TABLE OF gty_a991,
+          git_konp TYPE STANDARD TABLE OF gty_konp,
+          lt_eine1 TYPE TABLE OF ty_eine,
+          ls_eine1 TYPE ty_eine.
+
+
+    DATA : wa_a991 TYPE gty_a991,
+           wa_konp TYPE gty_konp.
+
+
+    FIELD-SYMBOLS:<fs_a991>  TYPE gty_a991,
+                  <fs_konp>  TYPE gty_konp,
+                  <fs_konv>  TYPE komv,
+                  <fs_konv1> TYPE komv.
+
+
+**End of changes by ramya on 10 Aug 2021
+    DATA : wa_tab TYPE w_tab.
+
+    DATA : msg1 TYPE string,
+           msg2 TYPE string.
+
+    DATA : lv_flag TYPE char1.
+
+
+    CALL METHOD im_item->get_data
+      RECEIVING
+        re_data = wa_itemtab.
+
+    CALL METHOD im_item->get_header
+      RECEIVING
+        re_header = im_header.
+
+    IF im_header IS NOT INITIAL.
+      CALL METHOD im_header->get_data
+        RECEIVING
+          re_data = wa_headtab.
+    ENDIF.
+
+    CALL METHOD im_header->get_items
+      RECEIVING
+        re_items = i_items1.
+
+
+    LOOP AT i_items1 INTO wa_items_line1.
+      wa_items1 = wa_items_line1-item.
+      CALL METHOD wa_items1->get_data
+        RECEIVING
+          re_data = wa_ekp.
+      APPEND wa_ekp TO it_ekp.
+      CLEAR:wa_ekp.
+    ENDLOOP.
+
+*--->  added code on 10.03.2022
+    IF wa_headtab-bsart = 'ZSUB' AND ( sy-tcode = 'ME21N' OR sy-tcode = 'ME22N' ).
+
+      SELECT infnr
+             ekorg
+             esokz
+             werks
+             loekz
+             erdat
+             ernam
+             ekgrp FROM eine INTO TABLE lt_eine1
+             FOR ALL ENTRIES IN it_ekp
+             WHERE infnr = it_ekp-infnr
+             AND   ekorg = wa_headtab-ekorg
+             AND   esokz = '3'
+             AND   werks = it_ekp-werks.
+
+      IF lt_eine1 IS NOT INITIAL.
+        MESSAGE e001(zpo)." WITH wa_eban-banfn wa_eban-bnfpo.
+      ENDIF.
+    ENDIF.
+
+    IF wa_headtab-bsart = 'YSUB' AND ( sy-tcode = 'ME21N' OR sy-tcode = 'ME22N' ).
+
+      SELECT infnr
+             ekorg
+             esokz
+             werks
+             loekz
+             erdat
+             ernam
+             ekgrp FROM eine INTO TABLE lt_eine1
+             FOR ALL ENTRIES IN it_ekp
+             WHERE infnr = it_ekp-infnr
+             AND   ekorg = wa_headtab-ekorg
+             AND   esokz = '0'
+             AND   werks = it_ekp-werks.
+
+      IF lt_eine1 IS NOT INITIAL.
+        MESSAGE w002(zpo)." WITH wa_eban-banfn wa_eban-bnfpo.
+      ENDIF.
+    ENDIF.
+*--->  end of added code on 10.03.2022
+
+**Begin of changes by ramya on 10 Aug 2021
+    DATA:lit_konv  TYPE STANDARD TABLE OF komv,
+         lit_konv1 TYPE STANDARD TABLE OF komv,
+         wa_konv   TYPE                   komv.
+
+    DATA : v_index  TYPE sytabix,
+           v_index1 TYPE sytabix,
+           v_flag   TYPE char1.
+
+
+*    IF wa_headtab-bsart EQ 'NB01'.
+*
+**      IF wa_itemtab-knttp IS INITIAL.
+**        MESSAGE 'Maintain Account Assignment Category' TYPE 'E'.
+**      ENDIF.
+**    ENDIF.
+*    FIELD-SYMBOLS:<fs_konp> TYPE gty.
+*---> New PO document type Validation
+    IF wa_headtab-bsart = 'NB01' AND wa_itemtab-werks = '1100' AND wa_itemtab-lgort NE '1101'.
+      MESSAGE ' Please maintain storage location 1101' TYPE 'E'.
+    ENDIF.
+*---> New PO document type Validation
+
+    IF wa_headtab-bsart NE 'ZSER'.
+
+      EXPORT it_ekp FROM it_ekp TO MEMORY ID 'ZSER'.
+
+*      LOOP AT it_ekp INTO wa_ekp.
+      READ TABLE it_ekp INTO wa_ekp WITH KEY ebelp = wa_itemtab-ebelp.
+
+      IMPORT v_flag TO v_flag FROM MEMORY ID 'PB00'.
+
+      IF wa_ekp-matnr IS NOT INITIAL
+         AND wa_ekp-infnr IS NOT INITIAL
+         AND wa_ekp-banfn IS NOT INITIAL.
+
+        IF wa_itemtab-charg IS NOT INITIAL.
+
+          SELECT  kappl
+                      kschl
+                      charg
+                      matnr
+                      werks
+                      lifnr
+                      kfrst
+                      datbi
+                      datab
+                      kbstat
+                      knumh
+                      FROM a991
+                      INTO TABLE git_a991
+                      WHERE charg = wa_itemtab-charg
+                      AND matnr = wa_itemtab-matnr
+                      AND werks = wa_itemtab-werks
+                      AND lifnr = wa_headtab-lifnr.
+          IF sy-subrc = 0.
+            SORT git_a991 BY knumh DESCENDING  kschl.
+          ENDIF.
+          IF git_a991 IS NOT INITIAL.
+            SELECT knumh
+                   kopos
+                   kappl
+                   kschl
+                   kbetr
+                   FROM konp
+                   INTO TABLE git_konp
+                   FOR ALL ENTRIES IN git_a991
+                   WHERE knumh = git_a991-knumh
+                   AND kappl = git_a991-kappl
+                   AND kschl = git_a991-kschl.
+
+
+            IF sy-subrc = 0.
+              SORT git_konp BY kschl ASCENDING knumh DESCENDING.
+            ENDIF.
+          ENDIF.
+          CALL METHOD im_item->get_conditions
+            IMPORTING
+              ex_conditions = lit_konv.
+          SORT lit_konv BY kschl.
+
+          IF v_flag NE 'X'.
+            lit_konv1 = lit_konv.
+            EXPORT lit_konv1 FROM lit_konv1 TO MEMORY ID 'PBXX'.
+            v_flag = 'X'.
+            EXPORT v_flag FROM v_flag TO MEMORY ID 'PB00'.
+          ENDIF.
+          DELETE lit_konv WHERE kschl = 'RA00'.
+*      DELETE lit_konv WHERE kschl = 'PB00'. "Added By sathish
+          DELETE lit_konv WHERE kschl = 'PBXX' AND kinak = 'Y'. "Added By sathish
+
+
+          LOOP AT lit_konv ASSIGNING <fs_konv>.
+            v_index  = sy-tabix.
+*        READ TABLE git_a991 ASSIGNING <fs_a991> WITH  KEY kschl = <fs_konv>-kschl.
+            READ TABLE git_a991 INTO wa_a991 INDEX 1.       "Added By sathish
+            IF sy-subrc EQ 0.
+*          READ TABLE git_konp ASSIGNING <fs_konp> WITH  KEY knumh = <fs_a991>-knumh
+*                                                            kschl = <fs_a991>-kschl.
+              READ TABLE git_konp INTO wa_konp WITH  KEY knumh = wa_a991-knumh   "Added By sathish
+                                                      kschl = wa_a991-kschl.
+              IF sy-subrc EQ 0.
+                IF <fs_konv>-kschl = 'PBXX'.
+                  lv_flag  = abap_true.
+*              <fs_konv>-kbetr = <fs_konp>-kbetr.
+*              <fs_konv>-kbetr = wa_konp-kbetr. "Commented By Sathish
+                  IF v_index1 IS NOT INITIAL.
+                    DELETE lit_konv INDEX v_index1.
+                  ENDIF.
+
+
+*            ELSEIF <fs_konv>-kschl = 'PB00' AND lv_flag = abap_false.
+**              <fs_konv>-kbetr = <fs_konp>-kbetr.
+*              <fs_konv>-kbetr = wa_konp-kbetr.
+*              <fs_konv>-kinak = 'Y'.
+*              v_index1 = v_index.
+*            ELSEIF <fs_konv>-kschl = 'PB00' AND lv_flag = abap_true.
+*              DELETE lit_konv INDEX   v_index.
+                ENDIF.
+                IF <fs_konv>-kschl = 'PB00'.
+                  <fs_konv>-kinak = 'Y'.
+                ENDIF.
+
+              ENDIF.
+            ENDIF.
+          ENDLOOP.
+          CALL METHOD im_item->set_conditions
+            EXPORTING
+              im_conditions = lit_konv.
+*
+        ENDIF.
+
+        IF wa_itemtab-charg IS  INITIAL.
+          CALL METHOD im_item->get_conditions
+            IMPORTING
+              ex_conditions = lit_konv.
+          SORT lit_konv BY kschl.
+
+          IF v_flag NE 'X'.
+            lit_konv1 = lit_konv.
+            EXPORT lit_konv1 FROM lit_konv1 TO MEMORY ID 'PBXX'.
+            v_flag = 'X'.
+            EXPORT v_flag FROM v_flag TO MEMORY ID 'PB00'.
+          ENDIF.
+
+          DELETE lit_konv WHERE kschl = 'PBXX'.
+*      LOOP AT lit_konv ASSIGNING <fs_konv>.
+*        IF <fs_konv>-kschl = 'PB00'.
+*          wa_itemtab-netpr = <fs_konv>-kbetr. "Commented by sathish
+*        ENDIF.
+*      ENDLOOP.
+          CALL METHOD im_item->set_conditions
+            EXPORTING
+              im_conditions = lit_konv.
+        ENDIF.
+      ELSEIF wa_ekp-matnr IS INITIAL
+        AND wa_ekp-infnr IS INITIAL
+        AND wa_ekp-banfn IS INITIAL.
+
+        IMPORT lit_konv1 TO lit_konv1 FROM MEMORY ID 'PBXX'.
+
+        IF lit_konv1 IS NOT INITIAL.
+          CALL METHOD im_item->set_conditions
+            EXPORTING
+              im_conditions = lit_konv1.
+        ENDIF.
+
+
+      ENDIF..
+
+*      ENDLOOP.
+    ENDIF.
+
+    cl_po ?= im_header.
+    IF NOT cl_po->my_recheck_queue IS INITIAL.
+      CLEAR cl_po->my_recheck_queue.
+    ENDIF.
+
+
+****IF wa_headtab-bsart = 'ZDMP' or wa_headtab-bsart = 'ZDPO'.
+****IF wa_itemtab-matnr is not initial.
+****IF wa_itemtab-werks is not initial.
+****
+****  select single eina~infnr
+****                eina~matnr
+****                eina~lifnr
+****                eine~werks into wa_tab
+****                           from eina INNER JOIN eine
+****                           on eina~infnr = eine~infnr
+****                           where matnr = wa_itemtab-matnr
+****                             and lifnr = wa_headtab-lifnr
+****                             and werks = wa_itemtab-werks.
+****
+****IF sy-subrc = 0.
+****
+******** incomplete
+****
+****else.
+****  msg2 = wa_itemtab-matnr.
+****  CONCATENATE 'Kindly maintain info record for : ' msg2 into msg1 SEPARATED BY space.
+****
+****  MESSAGE msg1 TYPE 'E'.
+****
+****ENDIF.
+****ENDIF.
+****ENDIF.
+****ENDIF.
+
+    DATA : wa_ekes TYPE ekes.
+
+    IF wa_itemtab-matnr IS NOT INITIAL.
+      IF wa_itemtab-ebeln IS NOT INITIAL.
+
+        SELECT SINGLE * FROM ekes INTO wa_ekes
+          WHERE ebeln = wa_itemtab-ebeln
+            AND ebelp = wa_itemtab-ebelp
+            AND ebtyp = 'LA'.
+
+
+        IF sy-subrc = 0.
+          IF wa_itemtab-loekz = 'L'.
+            wa_itemtab-loekz = ''.
+            MESSAGE 'This Material can not be Deleted' TYPE 'E'.
+          ENDIF.
+        ENDIF.
+
+      ENDIF.
+    ENDIF.
+
+    IF sy-tcode = 'ME21N' OR sy-tcode = 'ME22N' OR sy-tcode = 'ME29N' OR sy-tcode = 'ME23N'.
+
+
+*    BREAK-POINT.
+      DATA:
+        lv_ekpo1 TYPE eine,
+        lv_ekpo  LIKE wa_itemtab.
+*      LV_TEXT TYPE CHAR100.
+*LV_TEXT = 'Please check price as per info record it should be less than'
+*loop at  it_ekpo1 INTO wa_ekpo1.
+      lv_ekpo = wa_itemtab.
+
+      SELECT infnr,
+             matnr,
+             lifnr
+        FROM eina
+        INTO TABLE @DATA(lt_eina)
+        WHERE matnr = @lv_ekpo-matnr
+          AND matkl = @lv_ekpo-matkl
+          AND lifnr = @wa_headtab-lifnr.
+      IF sy-subrc EQ 0.
+        SELECT *
+          FROM eine
+          INTO TABLE @DATA(lt_eine)"lv_ekpo1
+          FOR ALL ENTRIES IN @lt_eina
+          WHERE infnr = @lt_eina-infnr
+            AND ekorg = @wa_headtab-ekorg
+            AND werks = @lv_ekpo-werks.
+        IF sy-subrc EQ 0.
+          READ TABLE lt_eine INTO lv_ekpo1 INDEX 1.
+          IF lv_ekpo1-netpr IS NOT INITIAL.
+            lv_ekpo1-netpr = lv_ekpo1-netpr + ( 1 / 100 ).
+            IF lv_ekpo1-netpr  LT lv_ekpo-netpr .
+*        wa_ekpo1-netpr = lv_ekpo1-netpr.
+*         ch_failed = 'X'.
+*          flag = 'X'.
+*          EXPORT flag FROM flag TO  MEMORY ID 'HOLD_PO'.
+
+*              MESSAGE   e000(zmessage) WITH lv_ekpo1-netpr.
+              CLEAR: lv_ekpo1,lv_ekpo-netpr.
+            ENDIF.
+          ENDIF.
+        ENDIF.
+      ENDIF.
+*   ENDLOOP.
+    ENDIF.
+
+
+*    ENDIF.
+*{   INSERT         REPK900258                                        1
+*Begin of code by saurabh 0n 23.10.2017
+    IF sy-tcode = 'ME21N' OR sy-tcode = 'ME22N'.
+
+
+      " added by shaik mastan vali on 27.01.2019.
+
+      DATA :wa_itemtab1 TYPE mepoitem.
+
+      CALL METHOD im_item->get_data
+        RECEIVING
+          re_data = wa_itemtab1.
+
+      " added by shaik mastan vali on 27.01.2019.
+
+
+*      IF wa_itemtab1-knttp NE 'K' AND wa_itemtab1-pstyp NE '9'. " added by shaik mastan vali on 27.01.2019.
+      IF wa_itemtab1-pstyp NE '9' .
+        IF  wa_itemtab1-pstyp NE '7'. " added by alka on 06.11.2019.
+
+          CASE wa_headtab-bsart.
+            WHEN 'NB'   OR
+                 'NB01' OR
+                 'NB02' OR
+                 'NB03' OR
+                 'NB04' OR
+                 'ZIM1' OR
+                 'ZIM2' OR
+                 'ZIM3' OR
+                 'ZIM4' OR
+                 'ZIMP'   .
+
+              IF  wa_itemtab1-banfn IS INITIAL."Added by alka on 06.11.2020
+                IF  wa_itemtab1-ebelp IS NOT INITIAL AND wa_itemtab1-loekz NE 'D' ."Added by alka on 06.11.2020
+*            IF  wa_itemtab-banfn IS INITIAL.
+                  MESSAGE 'Enter Purchase Requisition Number' TYPE 'E'.
+                ENDIF.                              " if  wa_itemtab-BANFN is INITIAL.
+              ENDIF.                              " if  wa_itemtab-BANFN is INITIAL.
+          ENDCASE.                               " case wa_headtab-BSART.
+
+        ENDIF." added by shaik mastan vali on 27.01.2019.
+
+      ENDIF.
+    ENDIF.
+*End off code by saurabh on 23.10.2017
+*}   INSERT
+
+
+************* Begin Of Code TR - REPK901645 Date 21.02.2019
+
+*** Restrict Changes to PO item, if GRN is Completed
+*
+*    DATA:
+*      LS_ITEM     TYPE MEPOITEM,
+*      LS_HEADER   TYPE MEPOHEADER,
+*      LT_COND     TYPE MMPUR_TKOMV,
+*      LT_EKBE     TYPE ME_EKBE,
+*      LT_EKBE_101 TYPE ME_EKBE,
+*      LT_EKBE_102 TYPE ME_EKBE,
+*      LS_EKBE     LIKE LINE OF LT_EKBE,
+*      LS_COND     LIKE LINE OF LT_COND.
+*
+*    DATA:
+*      LV_ITEM      TYPE KPOSN,
+*      LV_LINES_101 TYPE I,
+*      LV_LINES_102 TYPE I.
+*
+*
+*    CONSTANTS LC_COND TYPE KSCHL VALUE 'ZTOT'.
+*
+*    DATA:
+*      OBJ_HEADER_REF TYPE REF TO IF_PURCHASE_ORDER_MM.
+*
+**** Get Item Data
+*    IM_ITEM->GET_DATA( RECEIVING RE_DATA = LS_ITEM ).
+****** Get Header Reference
+*    IM_ITEM->GET_HEADER( RECEIVING RE_HEADER = OBJ_HEADER_REF ).
+***** Get item conditions
+*    IM_ITEM->GET_CONDITIONS( IMPORTING EX_CONDITIONS = LT_COND ).
+****** Get GRN data
+*    IM_ITEM->GET_HISTORY( IMPORTING EX_HISTORY =  LT_EKBE ).
+****** Get Header data
+*    OBJ_HEADER_REF->GET_DATA( RECEIVING RE_DATA = LS_HEADER ).
+*
+*    LV_ITEM = LS_ITEM-EBELP.
+*    IF LT_EKBE IS NOT INITIAL.
+*      LT_EKBE_101 = LT_EKBE.
+*      LT_EKBE_102 = LT_EKBE.
+*
+*      DELETE LT_EKBE_101 WHERE BWART NE '101'.
+*      DELETE LT_EKBE_102 WHERE BWART NE '102'.
+*
+*      LV_LINES_101 = LINES( LT_EKBE_101 ).
+*      LV_LINES_102 = LINES( LT_EKBE_102 ).
+*
+******* Check for GRN cancellations &
+**      compare no. of GRN Documents and Cancellation Documents
+**      if they are equal, allow for changes as equal no. of records
+**      indicate 102 happened for all 101 records
+*
+*      CHECK LV_LINES_101 NE LV_LINES_102.
+*
+****** Check for Condition type ZTOT which stores total PO Value
+*
+*      READ TABLE LT_COND INTO LS_COND WITH KEY KSCHL = LC_COND.
+*      IF SY-SUBRC EQ 0.
+*        IF TOT_VAL IS INITIAL.
+*          SELECT SINGLE KWERT FROM KONV INTO TOT_VAL
+*                        WHERE KNUMV EQ LS_HEADER-KNUMV
+*                          AND KPOSN EQ LV_ITEM
+*                          AND KSCHL EQ LC_COND.
+*          IF SY-SUBRC EQ 0 AND
+*             TOT_VAL NE LS_COND-KAWRT.
+*            MESSAGE E899(MM) WITH 'GRN is already Done, Changes are not allowed'.
+*          ELSE.
+*            TOT_VAL = LS_COND-KAWRT.
+*          ENDIF.
+*
+*        ELSE.
+*          IF TOT_VAL NE LS_COND-KAWRT.
+*            MESSAGE E899(MM) WITH 'GRN already Done, Changes are not allowed'.
+*          ENDIF.
+*        ENDIF.
+*      ENDIF.
+*    ENDIF.
+
+
+************* Begin Of Code TR - REPK901645 Date 21.02.2019
+
+*******added by reddy on 01032019
+
+    IF sy-tcode = 'ME21N' OR sy-tcode = 'ME22N'.
+      DATA:gs_ekpo       TYPE mepoitem,
+           gt_ekpo       TYPE TABLE OF mepoitem,
+           gs_header     TYPE mepoheader,
+           w_mtart       TYPE mtart,
+           i_items       TYPE purchase_order_items,
+           wa_ekpo1      TYPE mepoitem,
+           wa_ekpo2      TYPE mepoitem,
+*           wa_ekpo3      TYPE mepoitem,
+           it_ekpo1      TYPE TABLE OF mepoitem,
+           wa_items_line TYPE purchase_order_item,
+           wa_items      TYPE REF TO if_purchase_order_item_mm,
+           it_ekpo2      TYPE TABLE OF mepoitem,
+*           it_ekpo3      TYPE TABLE OF mepoitem,
+           p_bsart       TYPE ekko-bsart.
+
+
+      CALL METHOD im_header->get_data
+        RECEIVING
+          re_data = gs_header.
+
+      CALL METHOD im_header->get_items
+        RECEIVING
+          re_items = i_items.
+
+
+
+      LOOP AT i_items INTO wa_items_line.
+        wa_items = wa_items_line-item.
+        CALL METHOD wa_items->get_data
+          RECEIVING
+            re_data = wa_ekpo1.
+        APPEND wa_ekpo1 TO it_ekpo1.
+        CLEAR:wa_ekpo1.
+      ENDLOOP.
+
+      CLEAR:p_bsart.
+      p_bsart = gs_header-bsart.
+*      FREE MEMORY ID 'IDCODE'.
+*      SET PARAMETER ID 'IDCODE' FIELD P_BSART.
+      EXPORT p_bsart FROM p_bsart TO MEMORY ID  'ABC'.
+      IF gs_header-bsart = 'ZNRO'.
+        IF it_ekpo1 IS NOT INITIAL.
+          EXPORT it_ekpo1 FROM it_ekpo1 TO MEMORY ID  'ID1'.
+        ENDIF.
+        IF it_ekpo1 IS NOT INITIAL.
+          gt_ekpo = it_ekpo1.
+          LOOP AT gt_ekpo INTO gs_ekpo.
+            IF gs_ekpo-matnr IS NOT INITIAL.
+              SELECT SINGLE mtart FROM mara
+                            INTO w_mtart
+                            WHERE matnr = gs_ekpo-matnr.
+              IF w_mtart NE 'ZROH'.
+                MESSAGE 'Material type other than ZROH is not allowed.' TYPE 'E'.
+              ENDIF.
+            ENDIF.
+            CLEAR:gs_ekpo.
+          ENDLOOP.
+        ENDIF.
+      ENDIF.
+    ENDIF.
+******* end of code by reddy
+
+
+*------> Commented by Vijay  on 23.09.2019
+*    added by alka
+
+    IF sy-tcode EQ 'ME21N' OR sy-tcode EQ 'ME22N' OR sy-tcode = 'ME23N' .
+*  FIELD-SYMBOLS: <fs_bsart_t> type any.
+*  FIELD-SYMBOLS: <fs_werks_t> type any.
+*  FIELD-SYMBOLS: <fs_knttp_t> type any.
+*  ASSIGN ('(SAPLMEPO)EKKO-BSART') TO <fs_bsart_t>.
+**  ASSIGN ('(SAPLMEPO)MEPO1211-WERKS') TO <fs_WERKS_t>.
+*  ASSIGN ('(SAPLMEPO)EKPO-WERKS') TO <fs_WERKS_t>.
+*  ASSIGN ('(SAPLMEPO)EKPO-KNTTP') TO <fs_KNTTP_t>.
+*
+*   IF <fs_bsart_t> EQ 'YLOG'  .
+*  IF    <fs_WERKS_t> EQ  '1100'  OR <fs_WERKS_t> EQ  '1200' OR <fs_WERKS_t> EQ  '1300'.
+*   IF  <fs_KNTTP_t> EQ 'P' OR <fs_KNTTP_t> EQ 'E'.
+      LOOP AT SCREEN.
+        IF screen-name EQ '*MEPO1211-KNTTP' OR screen-name EQ 'MEPO1211-KNTTP'.
+
+          screen-input = 0.
+          screen-output = 1..
+          MODIFY SCREEN.
+
+        ENDIF .
+* MODIFY SCREEN.
+      ENDLOOP.
+*ENDIF .
+*ENDIF .
+*     ENDIF .
+
+    ENDIF .
+
+*    ENDIF   .
+*
+
+**Added by Samarth
+*
+*    CASE gs_header-bsart.
+*      WHEN 'NB01' OR
+*            'NB02' OR
+*            'NB03' OR
+*            'NB04' OR
+*            'ZIM1' OR
+*            'ZIM2' OR
+*            'ZIM3' OR
+*            'ZIM4' OR
+*            'ZIM5' OR
+*            'ZIMP' OR
+*            'ZTPO'.
+*        DATA:wa_ekpo        TYPE mepoitem,
+*             it_ekpo        TYPE TABLE OF mepoitem,
+*             wa_header      TYPE mepoheader,
+*             wa_mtart       TYPE mtart,
+*             it_items       TYPE purchase_order_items,
+*             wa_ekpo2       TYPE mepoitem,
+*             it_ekpo2       TYPE TABLE OF mepoitem,
+*             wa_items_line2 TYPE purchase_order_item,
+*             wa_items2      TYPE REF TO if_purchase_order_item_mm,
+*             wa_bsart       TYPE ekko-bsart.
+*
+*
+*        CALL METHOD im_header->get_data
+*          RECEIVING
+*            re_data = wa_header.
+*
+*        CALL METHOD im_header->get_items
+*          RECEIVING
+*            re_items = it_items.
+*
+*
+*
+*        LOOP AT it_items INTO wa_items_line2.
+*          wa_items2 = wa_items_line2-item.
+*          CALL METHOD wa_items2->get_data
+*            RECEIVING
+*              re_data = wa_ekpo2.
+*          APPEND wa_ekpo2 TO it_ekpo2.
+*          CLEAR:wa_ekpo2.
+*        ENDLOOP.
+*
+*        DATA : it_eban  TYPE TABLE OF eban,
+*               wa_eban  TYPE eban,
+*               it1_ekpo TYPE TABLE OF ekpo,
+*               wa1_ekpo TYPE ekpo.
+*
+*        TYPES : BEGIN OF ty_used,
+*                  banfn TYPE eban-banfn,
+*                  bnfpo TYPE eban-bnfpo,
+*                  menge TYPE menge_d,
+*                END OF ty_used.
+*
+*        DATA : gt_used TYPE TABLE OF ty_used,
+*               gs_used TYPE ty_used.
+*
+*        IF NOT it_ekpo2[] IS INITIAL.
+*          SELECT *
+*            FROM ekpo
+*            INTO TABLE it1_ekpo
+*             FOR ALL ENTRIES IN it_ekpo2
+*           WHERE ebeln NE gs_header-ebeln
+*             AND banfn = it_ekpo2-banfn
+*             AND bnfpo = it_ekpo2-bnfpo
+*             AND loekz NE 'L'.
+*
+*          SELECT *
+*            FROM eban
+*            INTO TABLE it_eban
+*           FOR ALL ENTRIES IN it_ekpo2
+*         WHERE banfn = it_ekpo2-banfn
+*           AND bnfpo = it_ekpo2-bnfpo.
+*        ENDIF.
+*
+*        REFRESH : gt_used.
+*        LOOP AT it1_ekpo INTO wa1_ekpo.
+*          CLEAR : gs_used.
+*          gs_used-banfn = wa1_ekpo-banfn.
+*          gs_used-bnfpo = wa1_ekpo-bnfpo.
+*          gs_used-menge = wa1_ekpo-menge.
+*          COLLECT gs_used INTO gt_used.
+*        ENDLOOP.
+*
+*        LOOP AT it_ekpo2 INTO wa_ekpo2 WHERE loekz NE 'L'.
+*          CLEAR : gs_used.
+*          gs_used-banfn = wa_ekpo2-banfn.
+*          gs_used-bnfpo = wa_ekpo2-bnfpo.
+*          gs_used-menge = wa_ekpo2-menge.
+*          COLLECT gs_used INTO gt_used.
+*        ENDLOOP.
+*
+*        LOOP AT it_eban INTO wa_eban.
+*          CLEAR : gs_used.
+*          READ TABLE gt_used INTO gs_used WITH KEY banfn = wa_eban-banfn
+*                                                   bnfpo = wa_eban-bnfpo.
+*          IF sy-subrc = 0.
+*            IF gs_used-menge GT wa_eban-menge.
+*              DATA : lv_msg TYPE char100.
+*              CONCATENATE 'PR quantity is full.' wa_eban-banfn wa_eban-bnfpo INTO lv_msg SEPARATED BY ' '.
+*              MESSAGE e000(zpo) WITH wa_eban-banfn wa_eban-bnfpo.
+*            ENDIF.
+*          ENDIF.
+*        ENDLOOP.
+*    ENDCASE.
+**End of Add
+
+*------> End of Comment by Vijay on 23.09.2019
+
+********************
+    it_ekpo2 = it_ekpo1 .
+
+    IF  sy-tcode = 'ME21N' OR sy-tcode = 'ME23N' ."OR sy-tcode = 'ME23N'.
+      IF  gs_header-bsart =  'NB01' OR gs_header-bsart = 'NB02' OR gs_header-bsart = 'NB03' OR gs_header-bsart = 'ZTPO' OR
+  gs_header-bsart = 'ZIM3' OR gs_header-bsart = 'ZIM1' OR gs_header-bsart = 'ZIM2' .
+        IF wa_itemtab-matnr IS NOT INITIAL .
+          IF  wa_itemtab1-pstyp NE '9' .
+            IF  wa_itemtab1-pstyp NE '7' .
+              TYPES : BEGIN OF typ_ekpo,
+                        ebeln TYPE ekpo-ebeln,
+                        ebelp TYPE ekpo-ebelp,
+                        loekz TYPE ekpo-loekz,
+                        menge TYPE ekpo-menge,
+                        banfn TYPE ekpo-banfn,
+                        bnfpo TYPE ekpo-bnfpo,
+                      END OF typ_ekpo .
+
+              TYPES : BEGIN OF typ_eban,
+                        banfn TYPE eban-banfn,
+                        bnfpo TYPE eban-bnfpo,
+                        menge TYPE eban-menge,
+                      END OF typ_eban.
+
+              DATA :  it_ekpo3 TYPE TABLE OF typ_ekpo,
+                      wa_ekpo3 TYPE typ_ekpo.
+              DATA :  it_eban TYPE TABLE OF typ_eban,
+                      wa_eban TYPE typ_eban.
+              DATA :  message TYPE char100 .
+              DATA : menge1 TYPE ekpo-menge,
+                     menge2 TYPE ekpo-menge.
+*      LOOP AT it_ekpo2 INTO wa_ekpo2 .
+*
+*        SELECT
+*        ebeln
+*        ebelp
+*        loekz
+*        menge
+*        banfn
+*        bnfpo
+*        FROM ekpo INTO TABLE it_ekpo3
+*        WHERE banfn = wa_ekpo2-banfn
+*        AND   bnfpo = wa_ekpo2-bnfpo
+*        AND   loekz <> 'L' .
+*
+*
+*      LOOP AT  it_ekpo3 INTO wa_ekpo3.
+*
+*        menge1 = wa_ekpo3-menge + menge1 .
+*
+*      ENDLOOP.
+*
+*      SELECT
+*      banfn
+*      bnfpo
+*      menge
+*      FROM eban
+*      INTO TABLE it_eban
+*      WHERE banfn = wa_ekpo2-banfn
+*      AND   bnfpo = wa_ekpo2-bnfpo.
+*
+*      LOOP AT it_eban INTO wa_eban.
+*
+*        menge2 = wa_eban-menge + menge2 .
+*
+*
+*      ENDLOOP.
+*
+*        if menge1 <= menge2 .
+*
+*         else .
+*        CONCATENATE 'PR Quantity is already full can not use for other' wa_ekpo2-ebelp 'line' INTO message SEPARATED BY space .
+*         MESSAGE message TYPE 'E'  .
+*
+*         endif .
+* ENDLOOP.
+* wa_itemtab
+              SELECT
+               ebeln
+               ebelp
+               loekz
+               menge
+               banfn
+               bnfpo
+               FROM ekpo INTO TABLE it_ekpo3
+               WHERE banfn = wa_itemtab-banfn
+               AND   bnfpo = wa_itemtab-bnfpo
+               AND   loekz <> 'L' .
+
+
+              LOOP AT  it_ekpo3 INTO wa_ekpo3.
+
+                menge1 = wa_ekpo3-menge + menge1 .
+
+              ENDLOOP.
+
+              SELECT
+              banfn
+              bnfpo
+              menge
+              FROM eban
+              INTO TABLE it_eban
+              WHERE banfn = wa_itemtab-banfn
+              AND   bnfpo = wa_itemtab-bnfpo.
+
+              LOOP AT it_eban INTO wa_eban.
+
+                menge2 = wa_eban-menge + menge2 .
+
+
+              ENDLOOP.
+
+              IF menge1 <= menge2 .
+
+              ELSE .
+                CONCATENATE 'PR Quantity is already full can not use for other' wa_itemtab-ebelp 'line' INTO message SEPARATED BY space .
+                MESSAGE message TYPE 'E'  .
+
+              ENDIF .
+
+
+
+            ENDIF.
+          ENDIF.
+        ENDIF.
+      ENDIF.
+    ENDIF.
+
+    IF  sy-tcode = 'ME22N'.
+      IF  wa_itemtab1-matnr IS NOT INITIAL .
+        IF  wa_itemtab1-pstyp NE '9'.
+          IF wa_itemtab1-pstyp NE '7' .
+            IF wa_itemtab1-ebelp IS NOT INITIAL AND wa_itemtab1-loekz NE 'L' .
+              TYPES : BEGIN OF typ_ekpo1,
+                        ebeln TYPE ekpo-ebeln,
+                        ebelp TYPE ekpo-ebelp,
+                        loekz TYPE ekpo-loekz,
+                        menge TYPE ekpo-menge,
+                        banfn TYPE ekpo-banfn,
+                        bnfpo TYPE ekpo-bnfpo,
+                      END OF typ_ekpo1 .
+
+              TYPES : BEGIN OF typ_eban1,
+                        banfn TYPE eban-banfn,
+                        bnfpo TYPE eban-bnfpo,
+                        menge TYPE eban-menge,
+                      END OF typ_eban1.
+
+              DATA :  it_ekpo4 TYPE TABLE OF typ_ekpo1,
+                      wa_ekpo4 TYPE typ_ekpo1.
+              DATA :  it_eban1 TYPE TABLE OF typ_eban1,
+                      wa_eban1 TYPE typ_eban1.
+
+              DATA :  message_1 TYPE char100 .
+              DATA : menge3 TYPE ekpo-menge,
+                     menge4 TYPE ekpo-menge.
+              IF wa_itemtab1-banfn IS NOT INITIAL AND wa_itemtab1-bnfpo IS NOT INITIAL .
+                SELECT
+                ebeln
+                ebelp
+                loekz
+                menge
+                banfn
+                bnfpo
+                FROM ekpo INTO TABLE it_ekpo4
+                WHERE banfn = wa_itemtab1-banfn
+                AND   bnfpo = wa_itemtab1-bnfpo
+                AND   loekz <> 'L' .
+
+
+                LOOP AT  it_ekpo4 INTO wa_ekpo4.
+
+                  menge3 = wa_ekpo4-menge + menge3 .
+
+                ENDLOOP.
+
+                SELECT
+                banfn
+                bnfpo
+                menge
+                FROM eban
+                INTO TABLE it_eban1
+                WHERE banfn = wa_itemtab1-banfn
+                AND   bnfpo = wa_itemtab1-bnfpo.
+
+                LOOP AT it_eban1 INTO wa_eban1.
+
+                  menge4 = wa_eban1-menge + menge4.
+
+
+                ENDLOOP.
+
+                IF menge3 <= menge4 .
+
+                ELSE .
+                  CONCATENATE 'PR Quantity is already full can not use for other' wa_itemtab1-ebelp 'line' INTO message_1 SEPARATED BY space .
+                  MESSAGE message_1 TYPE 'E'  .
+
+                ENDIF .
+              ENDIF .
+
+            ENDIF .
+          ENDIF .
+        ENDIF .
+      ENDIF .
+    ENDIF .
+
+*****    Code added by MD:15.02.2021
+*    BREAK-POINT.
+    IF  sy-tcode = 'ME22N' AND sy-ucomm = 'YES'.
+      DATA : t_rseg TYPE TABLE OF rseg,
+             w_rseg TYPE rseg,
+             w_rbkp TYPE rbkp,
+             t_mseg TYPE TABLE OF mseg,
+             w_mseg TYPE mseg.
+
+      SELECT *
+        FROM rseg INTO TABLE t_rseg
+        WHERE ebeln = wa_itemtab-ebeln
+              AND ebelp = wa_itemtab-ebelp
+              AND shkzg = 'S'.
+      LOOP AT t_rseg INTO w_rseg.
+        IF w_rseg-belnr IS NOT INITIAL.
+          SELECT SINGLE *
+            FROM rbkp
+            INTO w_rbkp
+            WHERE belnr = w_rseg-belnr
+            AND gjahr = w_rseg-gjahr.
+          IF w_rbkp-stblg IS INITIAL.
+            MESSAGE 'Deletion of PO is not allowed' TYPE 'E'.
+          ELSE.
+            CONTINUE.
+          ENDIF.
+          CLEAR w_rbkp.
+        ELSE.
+*        SELECT *
+*          FROM mseg INTO TABLE t_mseg
+*          WHERE ebeln = wa_itemtab-ebeln
+*            AND ebelp = wa_itemtab-ebelp
+*            AND bwart = '102'
+*            AND shkzg = 'S'.
+        ENDIF.
+        CLEAR w_rseg.
+      ENDLOOP.
+    ENDIF.
+****    End of code added by MD:15.02.2021
+    IF  sy-tcode = 'ME21N'.
+      IF  gs_header-bsart = 'NB04' .
+
+        wa_itemtab-werks =  '1100'.
+        wa_itemtab-lgort =  '1101'.
+
+      ELSEIF  gs_header-bsart = 'NB05'.
+
+        wa_itemtab-werks =  '1100'.
+        wa_itemtab-lgort =  '1107'.
+
+      ELSEIF gs_header-bsart = 'NB06' .
+
+        wa_itemtab-werks =  '1100'.
+        wa_itemtab-lgort =  '1106'.
+
+      ELSEIF gs_header-bsart = 'NB01' .
+
+        wa_itemtab-werks =  '1100'.
+        wa_itemtab-lgort =  '1101'.
+
+      ENDIF .
+
+      im_item->set_data( wa_itemtab ).
+    ENDIF .
+"""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""$"$\SE:(1) Class ZCL_IM_ME_PROCESS_PO_CUST, Interface IF_EX_ME_PROCESS_PO_CUST, Method PROCESS_ITEM, End                                                     A
+*$*$-Start: (1)---------------------------------------------------------------------------------$*$*
+ENHANCEMENT 1  ZMM_HSN.    "active version
+*
+  data : lv_matnr type matnr,
+         lv_werks type werks_d.
+
+  lv_matnr = wa_itemtab-matnr.
+  lv_werks = wa_itemtab-werks.
+
+  CALL FUNCTION 'ZMM_FM_HSN'
+    EXPORTING
+      i_matnr             = lv_matnr
+     I_WERKS             = lv_werks
+   EXCEPTIONS
+     HSN_NOT_VALID       = 1
+     OTHERS              = 2
+            .
+  IF sy-subrc = 1.
+    MESSAGE 'HSN not valid' type 'E'.
+  ENDIF.
+
+ENDENHANCEMENT.
+ENHANCEMENT 1  ZMM_TARIFFCODE_VALIDATION.    "active version
+*
+* Get Header informations
+*BREAK-POINT.
+data : ls_header TYPE MEPOHEADER,
+       lt_items TYPE PURCHASE_ORDER_ITEMS,
+       ls_items like line of lt_items,
+       ls_item TYPE MEPOITEM,
+       lr_item type ref to cl_po_item_handle_mm,
+       lt_esll TYPE MMSRV_ESLL,
+       ls_esll like line of lt_esll,
+       ls_ASMD type ASMD,
+       lv_length type i.
+ ls_header = im_header->get_data( ).
+* Get item list
+ lt_items = im_header->get_items( ).
+* Loop at items
+ LOOP AT lt_items INTO ls_items.
+* Get item informations
+   ls_items-item->get_data( RECEIVING re_data = ls_item ).
+* Assign to a ref to cl_po_item_handle_mm
+   lr_item ?= ls_items-item.
+* Then use methods of IF_SERVICES_MM interface to get service information
+  CALL METHOD lr_item->if_services_mm~get_srv_data
+     EXPORTING
+       im_packno = wa_itemtab-packno
+     IMPORTING
+       ex_esll   = lt_esll.
+
+  loop at lt_esll into ls_esll where srvpos is not INITIAL.
+    clear : ls_ASMD.
+    select single *
+      from ASMD
+      into ls_ASMD
+     where ASNUM = ls_esll-srvpos.
+      if sy-subrc = 0.
+        REPLACE all OCCURRENCES OF '.' in ls_ASMD-TAXTARIFFCODE with ''.
+        condense : ls_ASMD-TAXTARIFFCODE.
+       lv_length = strlen( ls_ASMD-TAXTARIFFCODE ).
+       if lv_length lt 6.
+        message 'Tax tariff code must be atleast 6 digits' type 'E'.
+       endif.
+
+      endif.
+
+ endloop..
+* etc.
+ ENDLOOP.
+
+***********************
+ENDENHANCEMENT.
+ENHANCEMENT 1  ZVALIDATION_RESTRICT_PLANT.    "active version
+*
+ IF SY-TCODE = 'ME21N' or SY-TCODE = 'ME22N' .
+  IF WA_HEADTAB-BSART  = 'NB04' or  WA_HEADTAB-BSART  = 'NB04' or WA_HEADTAB-BSART  = 'NB04'.
+
+  WA_ITEMTAB-WERKS = '1100' .
+*  MEPO1211-KNTTP  = '1100' .
+
+ ENDIF .
+ ENDIF .
+**Added by alka on 16.07.2019
+*
+IF SY-TCODE = 'ME21N' OR SY-TCODE = 'ME22N' OR SY-TCODE = 'ME23N' OR SY-TCODE = 'ME29N'.
+
+IF WA_HEADTAB-BSART  = 'NB01' OR WA_HEADTAB-BSART = 'ZIM1' or wa_headtab-bsart = 'YSUB'.
+*IF GS_HEADER-BSART  = 'NB01' OR GS_HEADER-BSART = 'ZIM1' .
+if WA_ITEMTAB-ebelp is NOT INITIAL AND WA_ITEMTAB-loekz NE 'D' .
+*if WA_ITEMTAB-ebelp is NOT INITIAL AND WA_ITEMTAB-loekz NE 'L' .
+IF WA_ITEMTAB-WERKS NE 1100.
+
+  MESSAGE 'Please maintain plant 1100' type 'E' .
+
+ELSE .
+
+
+
+ENDIF .
+*ENDIF .
+ENDIF .
+
+ENDIF .
+
+IF GS_HEADER-BSART = 'NB02' OR GS_HEADER-BSART = 'ZIM2' .
+if WA_ITEMTAB-ebelp is NOT INITIAL AND WA_ITEMTAB-loekz NE 'D'.
+*if WA_ITEMTAB-ebelp is NOT INITIAL AND WA_ITEMTAB-loekz NE 'L'.
+IF WA_ITEMTAB-WERKS NE 1200 .
+
+MESSAGE 'Please maintain plant 1200' type 'E' .
+
+ELSE.
+
+
+
+ENDIF .
+
+ENDIF .
+*ENDIF .
+ENDIF .
+*
+IF GS_HEADER-BSART = 'NB03' OR GS_HEADER-BSART = 'ZIM3' .
+if WA_ITEMTAB-ebelp is NOT INITIAL AND WA_ITEMTAB-loekz NE 'D'.
+*if WA_ITEMTAB-ebelp is NOT INITIAL AND WA_ITEMTAB-loekz NE 'L'.
+IF WA_ITEMTAB-WERKS NE 1300 .
+
+  MESSAGE 'Please maintain plant 1300' type 'E' .
+
+ELSE .
+
+
+
+ENDIF .
+
+ENDIF .
+*ENDIF .
+ENDIF .
+
+
+ENDIF .
+
+*Ended by alka on 16.07.2019
+
+ENDENHANCEMENT.
+*$*$-End:   (1)---------------------------------------------------------------------------------$*$*
+  ENDMETHOD.
