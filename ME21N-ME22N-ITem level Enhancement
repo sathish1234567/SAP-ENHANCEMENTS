@@ -1,0 +1,52 @@
+ME_PROCESS_PO_CUST:
+IF_EX_ME_PROCESS_PO_CUST~PROCESS_ITEM
+
+
+DATA: ls_mepoitm_new  TYPE mepoitem, " Update this structure only
+        ls_mepoitm_orig TYPE mepoitem, " Do not update, for ref. only
+        ls_mepoheader   TYPE mepoheader,
+        cl_mepoheader   TYPE REF TO if_purchase_order_mm.
+
+  cl_mepoheader = im_item->get_header( ).
+  ls_mepoheader = cl_mepoheader->get_data( ).
+  ls_mepoitm_orig = ls_mepoitm_new  = im_item->get_data( ).
+
+  DATA : lv_raube TYPE raube,
+         lv_lgort TYPE lgort_d.
+
+  IF ls_mepoheader-bstyp = 'F'.
+
+    IF ls_mepoitm_new-werks IS NOT INITIAL.
+
+      CLEAR : lv_raube, lv_lgort.
+
+      IF ls_mepoitm_new-matnr IS NOT INITIAL.
+        SELECT SINGLE raube
+          FROM mara
+          INTO lv_raube
+          WHERE matnr = ls_mepoitm_new-matnr.
+        IF sy-subrc IS INITIAL.
+          SELECT SINGLE lgort
+            FROM zjio_po_sloc
+            INTO lv_lgort
+            WHERE werks = ls_mepoitm_new-werks AND
+                  raube = lv_raube AND
+                  bsart = ls_mepoheader-bsart
+            AND   evers = ls_mepoitm_new-evers.       
+          IF sy-subrc IS INITIAL AND lv_lgort IS NOT INITIAL.
+            CLEAR ls_mepoitm_new-lgort.
+            ls_mepoitm_new-lgort = lv_lgort.
+            CALL METHOD im_item->set_data( ls_mepoitm_new ).
+          ENDIF.
+        ENDIF.
+      ENDIF.
+    ENDIF.
+  ENDIF.
+  
+  IF sy-tcode EQ 'XXXX'.
+
+    CLEAR ls_mepoitm_new-lgort.
+    ls_mepoitm_new-lgort = space.
+    CALL METHOD im_item->set_data( ls_mepoitm_new ).
+
+  ENDIF.
