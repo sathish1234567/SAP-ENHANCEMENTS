@@ -1,0 +1,65 @@
+FM:EXIT_SAPMM07M_004
+Tcode: MIGO
+Item level update the batch classifcation.
+SPRO-->LOGISTICS AND GENERAL --> BATCH MANAGEMENT --> Valuation Type --> activate the enhancement ext.
+
+Dynamical update the batch calssifcation data.
+
+Enhancement will trigger on while click on check/post only --> it is updating the data in batch  classifcation also.
+
+IF i_mseg-bwart = '101'.
+*-- Data Declarations
+  DATA : t_characters LIKE characters OCCURS 0 WITH HEADER LINE.
+  DATA : t_attributes LIKE api_ch_att OCCURS 0 WITH HEADER LINE.
+  DATA : t_values LIKE api_val_i OCCURS 0 WITH HEADER LINE.
+**-------------------GOODS MOVEMENT DETAILS FOR THE ORDER ENTERED----------
+  t_characters[] = characters[].
+  t_attributes[] = attributes[].
+  t_values[] = values[].
+
+
+  IF  w_afpo-pwerk = 'PS01'.
+*-- Raw Seed for order types PHYD , PKNL
+    IF ( w_aufk-auart = 'PHYD' OR
+         w_aufk-auart = 'PKNL' OR
+         w_aufk-auart = 'POHD' OR
+         w_aufk-auart = 'POKL') .
+      IF ( w_mara-mtart = 'ZRSD' OR w_mara-mtart = 'ZWCB' ).
+        CLEAR: v_season, v_year, v_season_year.
+        CONCATENATE w_aufk-zzsaiso w_aufk-zzsaisj INTO v_season_year SEPARATED BY space.
+
+        LOOP AT t_characters.
+          CASE t_characters-atnam.
+            WHEN 'PRODUCTION_YEAR'.
+              v_year = w_aufk-zzsaisj.
+              t_values-atinn = t_characters-atinn.
+              t_values-atnam = t_characters-atnam.
+              t_values-atwtb = w_aufk-zzsaisj.
+              APPEND t_values TO values.
+              CLEAR t_values.
+
+            WHEN 'SEASON'.
+              v_season = w_aufk-zzsaiso.
+              t_values-atinn = t_characters-atinn.
+              t_values-atnam = t_characters-atnam.
+              t_values-atwtb = w_aufk-zzsaiso.
+              APPEND t_values TO values.
+              CLEAR t_values.
+
+            WHEN 'GROWER_CODE'.
+              t_values-atinn = t_characters-atinn.
+              t_values-atnam = t_characters-atnam.
+              t_values-atwtb = w_aufk-zzgrower.
+              APPEND t_values TO values.
+              CLEAR t_values.
+
+            WHEN 'SEASON_YEAR'.
+*              CONCATENATE V_SEASON V_YEAR INTO V_SEASON_YEAR SEPARATED BY SPACE.
+              t_values-atinn = t_characters-atinn.
+              t_values-atnam = t_characters-atnam.
+              t_values-atwtb = v_season_year.
+              APPEND t_values TO values.
+              CLEAR t_values.
+          ENDCASE.
+        ENDLOOP.
+      ENDIF.
